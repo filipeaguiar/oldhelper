@@ -174,6 +174,8 @@ small, .field-help { color: var(--muted); font-weight: 500; line-height: 1.4; fo
 .result-row.total strong { font-size: 24px; }
 .purchase-state { padding: 12px; border-radius: 12px; background: rgba(76,118,88,.08); color: var(--green); font-weight: 750; font-size: 13px; line-height: 1.45; }
 .purchase-state.error { background: rgba(165,51,51,.08); color: var(--danger); }
+.ration-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+.ration-actions .button { min-height: 46px; }
 
 .group-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 20px; margin-bottom: 18px; }
 .group-toolbar h2 { font-family: Georgia, serif; color: var(--wine); margin-bottom: 5px; }
@@ -218,6 +220,22 @@ dialog::backdrop { background: rgba(30,24,20,.58); backdrop-filter: blur(3px); }
 .dialog-heading h2 { font-family: Georgia, serif; font-size: 30px; margin: 0; color: var(--wine); }
 .dialog-close { display: grid; place-items: center; width: 42px; height: 42px; border: 0; border-radius: 50%; background: transparent; color: var(--wine); font-size: 22px; line-height: 1; }
 .dialog-copy { color: var(--muted); line-height: 1.55; }
+.trip-summary { display: grid; gap: 16px; }
+.trip-overview { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; }
+.trip-overview > div { display: grid; gap: 4px; padding: 13px; border-radius: 12px; background: rgba(179,139,53,.08); }
+.trip-overview span { color: var(--muted); font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .05em; }
+.trip-overview strong { color: var(--wine); font-family: Georgia, serif; font-size: 20px; }
+.trip-summary h3 { margin: 0; color: var(--wine); font-family: Georgia, serif; }
+.trip-participant-list { display: grid; gap: 8px; max-height: min(320px, 34vh); margin: 0; padding: 0 2px 0 0; list-style: none; overflow-y: auto; }
+.trip-participant-list li { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 11px; background: #fffdf8; }
+.trip-participant-list li > span { display: grid; gap: 2px; min-width: 0; }
+.trip-participant-list strong { overflow-wrap: anywhere; }
+.trip-participant-list b { color: var(--wine); white-space: nowrap; }
+.trip-participant-list .trip-empty { display: block; color: var(--muted); text-align: center; }
+.trip-state { margin-top: 16px; padding: 12px; border-radius: 12px; font-size: 13px; font-weight: 750; line-height: 1.45; }
+.trip-state.ok { color: var(--green); background: rgba(76,118,88,.09); }
+.trip-state.error { color: var(--danger); background: rgba(165,51,51,.09); }
+.trip-dialog-actions .button { min-width: 150px; }
 .transfer-destination-fieldset { margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 14px; }
 .transfer-destination-fieldset legend { padding: 0 7px; color: var(--wine); font-weight: 900; }
 .transfer-destinations { display: grid; gap: 8px; max-height: min(360px, 38vh); overflow-y: auto; padding: 2px; }
@@ -291,6 +309,12 @@ dialog::backdrop { background: rgba(30,24,20,.58); backdrop-filter: blur(3px); }
   .section-nav button { padding: 9px 11px; }
   .group-actions { width: 100%; }
   .group-actions .button { flex: 1; }
+  .ration-actions, .trip-overview { grid-template-columns: 1fr; }
+  .trip-overview > div { grid-template-columns: 1fr auto; align-items: baseline; }
+  .trip-participant-list { max-height: 30vh; }
+  .trip-participant-list li { align-items: flex-start; }
+  .trip-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .trip-dialog-actions .button { width: 100%; min-width: 0; }
   .transfer-destinations { max-height: 34vh; }
   .transfer-destination-fieldset { padding: 10px; }
   .transfer-destination-option, .transfer-destination-option + .transfer-destination-option { padding: 11px 10px; }

@@ -180,8 +180,11 @@
             </label>
           </div>
 
-          <button id="buyRationsBtn" class="button primary full-button" type="submit">Comprar rações faltantes</button>
-          <p class="field-help">A compra debita a moeda escolhida do portador pagador e adiciona as rações ao destino em uma única operação.</p>
+          <div class="ration-actions">
+            <button id="buyRationsBtn" class="button primary" type="submit">Comprar rações faltantes</button>
+            <button id="executeTripBtn" class="button secondary" type="button"><i class="ra ra-horseshoe" aria-hidden="true"></i> Realizar viagem</button>
+          </div>
+          <p class="field-help">A compra debita a moeda escolhida do portador pagador e adiciona as rações ao destino em uma única operação. Ao realizar a viagem, o consumo base é debitado primeiro dos animais e depois dos personagens participantes.</p>
         </form>
 
         <section class="card ration-result-card" aria-live="polite">
@@ -274,6 +277,22 @@
       <div class="dialog-actions">
         <button class="button ghost" value="cancel" type="button" data-close-dialog>Cancelar</button>
         <button class="button primary" value="default" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="tripDialog" aria-labelledby="tripDialogTitle">
+    <form id="tripForm" method="dialog" class="dialog-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">VIAGEM PLANEJADA</p><h2 id="tripDialogTitle">Realizar viagem</h2></div>
+        <button class="dialog-close" value="cancel" type="button" data-close-dialog aria-label="Fechar"><i class="ra ra-x-mark" aria-hidden="true"></i></button>
+      </div>
+      <p class="dialog-copy">Confira o consumo antes de registrar a viagem. As rações serão debitadas primeiro dos animais de carga e depois dos personagens participantes.</p>
+      <div id="tripSummary" class="trip-summary" aria-live="polite"></div>
+      <div id="tripState" class="trip-state" role="status"></div>
+      <div class="dialog-actions trip-dialog-actions">
+        <button class="button ghost" value="cancel" type="button" data-close-dialog>Cancelar</button>
+        <button id="confirmTripBtn" class="button primary" value="default" type="submit">Confirmar viagem</button>
       </div>
     </form>
   </dialog>

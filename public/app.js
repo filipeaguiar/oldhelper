@@ -14,7 +14,8 @@ const dom = {
   bulkTransferBtn: $('bulkTransferBtn'), addItemBtn: $('addItemBtn'), inventory: $('inventory'),
   rationForm: $('rationForm'), rationDays: $('rationDays'), rationMargin: $('rationMargin'), rationPrice: $('rationPrice'),
   rationCurrency: $('rationCurrency'), rationParticipants: $('rationParticipants'), rationPayer: $('rationPayer'),
-  rationDestination: $('rationDestination'), rationResult: $('rationResult'), buyRationsBtn: $('buyRationsBtn'),
+  rationDestination: $('rationDestination'), rationResult: $('rationResult'), buyRationsBtn: $('buyRationsBtn'), executeTripBtn: $('executeTripBtn'),
+  tripDialog: $('tripDialog'), tripForm: $('tripForm'), tripSummary: $('tripSummary'), tripState: $('tripState'), confirmTripBtn: $('confirmTripBtn'),
   addCharacterBtn: $('addCharacterBtn'), addAnimalBtn: $('addAnimalBtn'), groupList: $('groupList'),
   historyList: $('historyList'), clearHistoryBtn: $('clearHistoryBtn'),
   itemDialog: $('itemDialog'), itemForm: $('itemForm'), itemDialogTitle: $('itemDialogTitle'), itemId: $('itemId'),
@@ -47,6 +48,7 @@ const INSTALL_DISMISSED_KEY = 'oldHelperInstallDismissed';
 const LAST_CAMPAIGN_KEY = 'oldHelperCampaignId';
 const pendingCoinConsolidations = new Set();
 let deferredInstallPrompt = null;
+let tripExecutionPending = false;
 
 function isInstalledMode() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
@@ -1057,6 +1059,115 @@ function rationCalculation() {
   const balance = holderWallet(payerId)[currency] || 0;
   return { participants, days, margin, price, daily, base, reserve, recommended, stock, missing, cost, currency, payerId, destinationId, balance };
 }
+function tripRationItems(participants, items = state.items) {
+  const selectedCharacterIds = new Set(participants.filter((holder) => holder.type === 'character').map((holder) => holder.id));
+  const sourceHolders = [
+    ...state.containers.filter((holder) => holder.type === 'animal').sort(compareHoldersForDisplay),
+    ...state.containers.filter((holder) => selectedCharacterIds.has(holder.id)).sort(compareHoldersForDisplay)
+  ];
+  return sourceHolders.flatMap((holder) => items
+    .filter((item) => item.containerId === holder.id && item.category === 'Ração')
+    .sort((a, b) => a.id.localeCompare(b.id)));
+}
+function tripRationPlan(calc, items = state.items) {
+  const eligibleItems = tripRationItems(calc.participants, items);
+  const available = eligibleItems.reduce((sum, item) => sum + Math.max(0, num(item.qty)), 0);
+  let remaining = calc.base;
+  const debits = [];
+  for (const item of eligibleItems) {
+    if (remaining <= 0) break;
+    const debit = Math.min(Math.max(0, num(item.qty)), remaining);
+    if (debit > 0) debits.push({ item, debit });
+    remaining -= debit;
+  }
+  return { eligibleItems, available, debits, missing:Math.max(0, remaining) };
+}
+function renderTripDialog() {
+  const calc = rationCalculation();
+  const plan = tripRationPlan(calc);
+  const participantRows = calc.participants.map((holder) => {
+    const consumption = num(holder.dailyRations) * calc.days;
+    return `<li><span><strong>${esc(holder.name)}</strong><small>${esc(holderKind(holder))} · ${formatNumber(holder.dailyRations)} / dia</small></span><b>${formatNumber(consumption)} rações</b></li>`;
+  }).join('');
+  dom.tripSummary.innerHTML = `
+    <div class="trip-overview">
+      <div><span>Duração</span><strong>${plural(calc.days, 'dia')}</strong></div>
+      <div><span>Consumo total</span><strong>${formatNumber(calc.base, 0)} rações</strong></div>
+      <div><span>Estoque elegível</span><strong>${formatNumber(plan.available)} rações</strong></div>
+    </div>
+    <h3>Participantes</h3>
+    <ul class="trip-participant-list">${participantRows || '<li class="trip-empty">Nenhum participante selecionado.</li>'}</ul>`;
+  const invalid = !calc.participants.length;
+  const insufficient = !invalid && plan.missing > 0;
+  dom.tripState.className = `trip-state ${invalid || insufficient ? 'error' : 'ok'}`;
+  dom.tripState.textContent = invalid
+    ? 'Selecione pelo menos um participante na calculadora.'
+    : insufficient
+      ? `Faltam ${formatNumber(plan.missing)} rações nos animais e personagens participantes.`
+      : `Pronto para debitar ${formatNumber(calc.base, 0)} rações: animais primeiro, personagens depois.`;
+  dom.confirmTripBtn.disabled = tripExecutionPending || invalid || insufficient || calc.base <= 0;
+  dom.confirmTripBtn.textContent = tripExecutionPending ? 'Registrando…' : `Confirmar ${formatNumber(calc.base, 0)} rações`;
+  return { calc, plan };
+}
+function openTripDialog() {
+  const calc = rationCalculation();
+  if (!calc.participants.length) return toast('Selecione pelo menos um participante antes de realizar a viagem.', 'error');
+  renderTripDialog();
+  dom.tripDialog.showModal();
+}
+async function executePlannedTrip() {
+  if (tripExecutionPending) return;
+  const calc = rationCalculation();
+  if (!calc.participants.length) throw new Error('Selecione pelo menos um participante.');
+  const participantNames = calc.participants.map((holder) => holder.name);
+  const historyText = `${state.identity.name} realizou uma viagem de ${plural(calc.days, 'dia')}, com ${participantNames.join(', ')}, consumindo ${formatNumber(calc.base, 0)} rações.`;
+  tripExecutionPending = true;
+  renderTripDialog();
+  try {
+    if (state.mode === 'cloud') {
+      const candidates = tripRationItems(calc.participants);
+      const { db, doc, collection, runTransaction, serverTimestamp } = state.cloud;
+      const refs = candidates.map((item) => doc(db, 'campaigns', state.campaignId, 'items', item.id));
+      const historyRef = doc(collection(db, 'campaigns', state.campaignId, 'history'));
+      await runTransaction(db, async (transaction) => {
+        const snaps = [];
+        for (const ref of refs) snaps.push(await transaction.get(ref));
+        const latestItems = snaps.filter((snap) => snap.exists()).map((snap) => ({ id:snap.id, ...snap.data(), _ref:snap.ref }));
+        const latestPlan = tripRationPlan(calc, latestItems);
+        if (latestPlan.missing > 0) throw new Error(`Estoque alterado. Faltam ${formatNumber(latestPlan.missing)} rações para realizar a viagem.`);
+        for (const { item, debit } of latestPlan.debits) {
+          transaction.update(item._ref, { qty:num(item.qty) - debit, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+        }
+        transaction.set(historyRef, { text:historyText, by:state.identity.name, at:serverTimestamp() });
+      });
+    } else {
+      const plan = tripRationPlan(calc);
+      if (plan.missing > 0) throw new Error(`Faltam ${formatNumber(plan.missing)} rações para realizar a viagem.`);
+      const previousQuantities = plan.debits.map(({ item }) => [item, item.qty, item.updatedAt, item.updatedBy]);
+      const previousHistory = state.history;
+      try {
+        const updatedAt = nowISO();
+        for (const { item, debit } of plan.debits) {
+          item.qty = num(item.qty) - debit;
+          item.updatedAt = updatedAt;
+          item.updatedBy = state.identity.name;
+        }
+        state.history = [{ id:uid('history'), text:historyText, by:state.identity.name, at:updatedAt }, ...state.history].slice(0, 100);
+        writeLocal();
+      } catch (error) {
+        for (const [item, qty, updatedAt, updatedBy] of previousQuantities) Object.assign(item, { qty, updatedAt, updatedBy });
+        state.history = previousHistory;
+        throw error;
+      }
+      renderAll();
+    }
+    dom.tripDialog.close();
+    toast(`Viagem realizada: ${formatNumber(calc.base, 0)} rações consumidas.`);
+  } finally {
+    tripExecutionPending = false;
+    if (dom.tripDialog.open) renderTripDialog();
+  }
+}
 function renderRationCalculator() {
   const calc = rationCalculation();
   const payer = state.containers.find((holder) => holder.id === calc.payerId);
@@ -1082,6 +1193,8 @@ function renderRationCalculator() {
     <div class="purchase-state ${statusClass}">${esc(status)}</div>`;
   dom.buyRationsBtn.disabled = !calc.participants.length || calc.missing <= 0 || !payer || !destination || calc.balance < calc.cost;
   dom.buyRationsBtn.textContent = calc.missing > 0 ? `Comprar ${formatNumber(calc.missing,0)} rações por ${formatNumber(calc.cost,0)} ${calc.currency}` : 'Estoque suficiente';
+  dom.executeTripBtn.disabled = !state.containers.length;
+  if (dom.tripDialog.open) renderTripDialog();
 }
 async function purchaseRations() {
   const calc = rationCalculation();
@@ -1425,6 +1538,11 @@ function bindEvents() {
   dom.rationForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     try { await purchaseRations(); } catch (error) { toast(error.message, 'error'); }
+  });
+  dom.executeTripBtn.addEventListener('click', openTripDialog);
+  dom.tripForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try { await executePlannedTrip(); } catch (error) { toast(error.message, 'error'); }
   });
 
   dom.addCharacterBtn.addEventListener('click', () => openHolderDialog(null, 'character'));
