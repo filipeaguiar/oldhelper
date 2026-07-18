@@ -1,89 +1,365 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#701b22" />
+  <meta name="description" content="Inventário compartilhado, tesouro e calculadora de rações para grupos de Old Dragon 2." />
+  <title>Old Helper — Carga do Grupo</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.16.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.16.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.16.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.16.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.16.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.16.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.16.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.16.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.16.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.16.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+  <main id="landing" class="landing page">
+    <section class="hero-panel">
+      <div class="brand-mark" aria-hidden="true">⚔</div>
+      <p class="eyebrow">OLD HELPER</p>
+      <h1>Carga do Grupo</h1>
+      <p class="lead">Inventário, tesouro, rações, munições e cargas mágicas compartilhados entre jogadores e Mestre.</p>
+      <div id="connectionBadge" class="status-badge">Verificando modo de dados…</div>
+    </section>
 
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
-      }
-    </style>
-  </head>
-  <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+    <section class="access-grid">
+      <form id="identityForm" class="card access-card" autocomplete="off">
+        <h2>Identificação</h2>
+        <label>Seu nome
+          <input id="displayName" maxlength="40" required placeholder="Ex.: Filipe" />
+        </label>
+        <label>Perfil
+          <select id="userRole">
+            <option value="player">Jogador</option>
+            <option value="gm">Mestre</option>
+          </select>
+        </label>
+      </form>
+
+      <form id="createForm" class="card access-card" autocomplete="off">
+        <h2>Criar campanha</h2>
+        <label>Nome da campanha
+          <input id="campaignName" maxlength="60" required placeholder="Ex.: As Ruínas de Valansia" />
+        </label>
+        <label>Primeiro animal de carga
+          <input id="animalName" maxlength="40" value="Mula do Grupo" required />
+        </label>
+        <button class="button primary" type="submit">Criar campanha</button>
+      </form>
+
+      <form id="joinForm" class="card access-card" autocomplete="off">
+        <h2>Entrar em campanha</h2>
+        <label>Código da campanha
+          <input id="joinCode" maxlength="8" required placeholder="Ex.: F7K2Q9" autocapitalize="characters" />
+        </label>
+        <button class="button secondary" type="submit">Entrar com o código</button>
+      </form>
+    </section>
+    <p class="landing-note">Sem Firebase, os dados ficam apenas neste navegador. Com Firebase, todos os participantes consultam e alteram a mesma campanha em tempo real.</p>
+  </main>
+
+  <main id="app" class="app-shell hidden">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">CAMPANHA</p>
+        <h1 id="campaignTitle">Carga do Grupo</h1>
+        <div class="campaign-meta">
+          <button id="copyCodeBtn" class="code-chip" type="button" title="Copiar código">Código: <strong id="campaignCode">—</strong></button>
+          <span id="syncStatus" class="sync-status">—</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button id="settingsBtn" class="icon-button" type="button" title="Configurações" aria-label="Configurações">⚙</button>
+        <button id="leaveBtn" class="button ghost" type="button">Sair</button>
+      </div>
+    </header>
+
+    <nav class="section-nav card" aria-label="Áreas do aplicativo">
+      <button type="button" data-view="resumo" class="active">Resumo</button>
+      <button type="button" data-view="inventario">Inventário</button>
+      <button type="button" data-view="racoes">Rações e compras</button>
+      <button type="button" data-view="grupo">Grupo</button>
+      <button type="button" data-view="historico">Histórico</button>
+    </nav>
+
+    <section class="app-view active" data-view-panel="resumo">
+      <section id="summary" class="summary-grid" aria-label="Resumo do grupo"></section>
+      <div class="dashboard-grid">
+        <section class="card dashboard-card">
+          <div class="section-heading">
+            <div><p class="eyebrow">TESOURO</p><h2>Moedas por portador</h2></div>
+            <button type="button" class="button secondary small" data-go-view="inventario">Abrir inventário</button>
+          </div>
+          <div id="walletSummary" class="wallet-summary"></div>
+        </section>
+        <section class="card dashboard-card">
+          <div class="section-heading"><div><p class="eyebrow">ATENÇÃO</p><h2>Alertas do grupo</h2></div></div>
+          <div id="alertsSummary" class="alerts-summary"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="app-view" data-view-panel="inventario">
+      <section class="toolbar card">
+        <label class="search-field">
+          <span>Buscar</span>
+          <input id="searchInput" type="search" placeholder="Item, descrição, observação ou portador" />
+        </label>
+        <label>
+          <span>Categoria</span>
+          <select id="categoryFilter">
+            <option value="">Todas</option>
+            <option>Arma</option>
+            <option>Armadura</option>
+            <option>Equipamento</option>
+            <option>Munição</option>
+            <option>Ração</option>
+            <option>Moeda</option>
+            <option>Consumível</option>
+            <option>Item mágico</option>
+            <option>Tesouro</option>
+            <option>Outro</option>
+          </select>
+        </label>
+        <label>
+          <span>Portador</span>
+          <select id="containerFilter"><option value="">Todos</option></select>
+        </label>
+        <button id="addItemBtn" class="button primary add-button" type="button">＋ Adicionar item</button>
+      </section>
+      <section id="inventory" class="inventory-grid" aria-live="polite"></section>
+    </section>
+
+    <section class="app-view" data-view-panel="racoes">
+      <div class="ration-layout">
+        <form id="rationForm" class="card ration-form" autocomplete="off">
+          <div class="section-heading">
+            <div><p class="eyebrow">VIAGEM</p><h2>Calculadora de rações</h2></div>
+          </div>
+          <div class="form-grid two-columns compact-grid">
+            <label>Dias de viagem
+              <input id="rationDays" type="number" min="1" step="1" value="7" required />
+            </label>
+            <label>Margem de segurança
+              <div class="input-suffix"><input id="rationMargin" type="number" min="0" max="500" step="1" value="20" /><span>%</span></div>
+            </label>
+            <label>Preço por ração
+              <input id="rationPrice" type="number" min="0" step="1" value="1" />
+            </label>
+            <label>Moeda usada na compra
+              <select id="rationCurrency"><option>PO</option><option>PP</option><option>PC</option></select>
+            </label>
+          </div>
+
+          <fieldset class="participants-fieldset">
+            <legend>Participantes desta viagem</legend>
+            <p class="field-help">A quantidade diária de cada integrante é configurada na tela Grupo.</p>
+            <div id="rationParticipants" class="participants-list"></div>
+          </fieldset>
+
+          <div class="form-grid two-columns compact-grid">
+            <label>Pagar usando as moedas de
+              <select id="rationPayer"></select>
+            </label>
+            <label>Guardar as rações compradas em
+              <select id="rationDestination"></select>
+            </label>
+          </div>
+
+          <button id="buyRationsBtn" class="button primary full-button" type="submit">Comprar rações faltantes</button>
+          <p class="field-help">A compra debita a moeda escolhida do portador pagador e adiciona as rações ao destino em uma única operação.</p>
+        </form>
+
+        <section class="card ration-result-card" aria-live="polite">
+          <p class="eyebrow">RESULTADO</p>
+          <h2>Planejamento</h2>
+          <div id="rationResult" class="ration-result"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="app-view" data-view-panel="grupo">
+      <section class="card group-toolbar">
+        <div>
+          <p class="eyebrow">PORTADORES</p>
+          <h2>Personagens e animais de carga</h2>
+          <p>Adicione, edite ou remova integrantes. Ao remover alguém com itens, o aplicativo solicita um destino para transferir todo o conteúdo.</p>
+        </div>
+        <div class="group-actions">
+          <button id="addCharacterBtn" class="button secondary" type="button">＋ Personagem</button>
+          <button id="addAnimalBtn" class="button primary" type="button">＋ Animal de carga</button>
+        </div>
+      </section>
+      <section id="groupList" class="group-grid"></section>
+    </section>
+
+    <section class="app-view" data-view-panel="historico">
+      <section class="card activity-card">
+        <div class="section-heading">
+          <div><p class="eyebrow">REGISTRO</p><h2>Atividade recente</h2></div>
+          <button id="clearHistoryBtn" class="button ghost small" type="button">Limpar</button>
+        </div>
+        <ol id="historyList" class="history-list"></ol>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="itemDialog">
+    <form id="itemForm" method="dialog" class="dialog-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">INVENTÁRIO</p><h2 id="itemDialogTitle">Adicionar item</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Fechar">×</button>
+      </div>
+      <input id="itemId" type="hidden" />
+      <div class="form-grid two-columns">
+        <label class="span-2">Nome
+          <input id="itemName" maxlength="80" required placeholder="Ex.: Flecha de Guerra" />
+        </label>
+        <label class="span-2">Descrição
+          <textarea id="itemDescription" rows="4" maxlength="2000" placeholder="Aparência, propriedades conhecidas, efeitos, história e demais detalhes do item…"></textarea>
+          <small>A descrição pode ser editada a qualquer momento.</small>
+        </label>
+        <label>Categoria
+          <select id="itemCategory" required>
+            <option>Equipamento</option><option>Arma</option><option>Armadura</option><option>Munição</option><option>Ração</option><option>Moeda</option><option>Consumível</option><option>Item mágico</option><option>Tesouro</option><option>Outro</option>
+          </select>
+        </label>
+        <label>Portador
+          <select id="itemContainer" required></select>
+        </label>
+        <label>Quantidade
+          <input id="itemQty" type="number" min="0" step="1" value="1" required />
+        </label>
+        <label>Unidade
+          <select id="itemUnit">
+            <option value="un.">un.</option><option value="flechas">flechas</option><option value="virotes">virotes</option><option value="rações">rações</option><option value="PO">PO</option><option value="PP">PP</option><option value="PC">PC</option><option value="kg">kg</option><option value="doses">doses</option>
+          </select>
+        </label>
+        <label>Carga por unidade
+          <input id="itemLoad" type="number" min="0" step="0.01" value="0" />
+          <small>Moedas usam automaticamente 1 ponto de carga por 100 peças.</small>
+        </label>
+        <label class="checkbox-label">
+          <input id="itemBackpack" type="checkbox" />
+          <span>É uma mochila equipada (+5 na carga máxima)</span>
+        </label>
+        <fieldset class="span-2 charge-fieldset">
+          <legend>Cargas ou usos mágicos</legend>
+          <label>Atuais<input id="itemCharges" type="number" min="0" step="1" value="0" /></label>
+          <label>Máximas<input id="itemMaxCharges" type="number" min="0" step="1" value="0" /></label>
+        </fieldset>
+        <label class="span-2">Observações da mesa
+          <textarea id="itemNotes" rows="3" maxlength="500" placeholder="Condição atual, proprietário original, identificação pendente ou lembretes rápidos…"></textarea>
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button class="button ghost" value="cancel" type="button" data-close-dialog>Cancelar</button>
+        <button class="button primary" value="default" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="holderDialog">
+    <form id="holderForm" method="dialog" class="dialog-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">GRUPO</p><h2 id="holderDialogTitle">Adicionar portador</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Fechar">×</button>
+      </div>
+      <input id="holderId" type="hidden" />
+      <div class="form-grid two-columns">
+        <label class="span-2">Nome
+          <input id="holderName" maxlength="40" required placeholder="Ex.: Ferrugem" />
+        </label>
+        <label>Tipo
+          <select id="holderType">
+            <option value="character">Personagem</option>
+            <option value="animal">Animal de carga</option>
+            <option value="stash">Depósito compartilhado</option>
+          </select>
+        </label>
+        <label id="holderSubtypeLabel">Subtipo
+          <input id="holderSubtype" maxlength="40" placeholder="Ex.: Mula, cavalo, guerreiro" />
+        </label>
+        <label id="holderPlayerLabel">Jogador
+          <input id="holderPlayer" maxlength="40" placeholder="Ex.: Filipe" />
+        </label>
+        <label id="holderStrengthLabel">Força
+          <input id="holderStrength" type="number" min="1" max="30" value="10" />
+        </label>
+        <label id="holderConstitutionLabel">Constituição
+          <input id="holderConstitution" type="number" min="1" max="30" value="10" />
+        </label>
+        <label id="holderCapacityLabel">Capacidade de carga
+          <input id="holderCapacity" type="number" min="0" step="1" value="20" />
+        </label>
+        <label class="checkbox-label span-2">
+          <input id="holderActive" type="checkbox" checked />
+          <span>Participa normalmente das viagens</span>
+        </label>
+        <label class="checkbox-label span-2">
+          <input id="holderConsumesRations" type="checkbox" checked />
+          <span>Entra na calculadora de rações</span>
+        </label>
+        <label class="span-2">Consumo diário de rações
+          <input id="holderDailyRations" type="number" min="0" step="0.25" value="1" />
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button class="button ghost" value="cancel" type="button" data-close-dialog>Cancelar</button>
+        <button class="button primary" value="default" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="removeHolderDialog">
+    <form id="removeHolderForm" method="dialog" class="dialog-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">REMOÇÃO SEGURA</p><h2>Remover portador</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Fechar">×</button>
+      </div>
+      <input id="removeHolderId" type="hidden" />
+      <p id="removeHolderMessage" class="dialog-copy"></p>
+      <label id="removeTargetLabel">Transferir todos os itens e moedas para
+        <select id="removeHolderTarget"></select>
+      </label>
+      <div class="dialog-actions">
+        <button class="button ghost" value="cancel" type="button" data-close-dialog>Cancelar</button>
+        <button class="button danger" value="default" type="submit">Transferir e remover</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog">
+    <form id="settingsForm" method="dialog" class="dialog-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">CAMPANHA</p><h2>Configurações</h2></div>
+        <button class="dialog-close" value="cancel" aria-label="Fechar">×</button>
+      </div>
+      <label>Nome da campanha
+        <input id="settingsCampaignName" maxlength="60" required />
+      </label>
+      <div class="rule-note">
+        <strong>Modelo simples:</strong> personagens, animais e depósitos usam a mesma estrutura de “portador”. Moedas são itens normais e podem ficar com qualquer portador.
+      </div>
+      <div class="settings-utilities">
+        <button id="exportBtn" type="button" class="button secondary">Exportar JSON</button>
+        <label class="button secondary file-button">Importar JSON<input id="importInput" type="file" accept="application/json" /></label>
+      </div>
+      <div class="dialog-actions">
+        <button class="button ghost" value="cancel" type="button" data-close-dialog>Cancelar</button>
+        <button class="button primary" value="default" type="submit">Salvar alterações</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="emptyTemplate">
+    <div class="empty-state">
+      <div aria-hidden="true">🧳</div>
+      <h3>Nenhum item encontrado</h3>
+      <p>Adicione o primeiro item ou altere os filtros.</p>
     </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
+  </template>
 
-    <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
-        }
-      });
-    </script>
-  </body>
+  <script type="module" src="app.js"></script>
+</body>
 </html>
