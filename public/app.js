@@ -38,7 +38,7 @@ const dom = {
 };
 
 const state = {
-  mode: 'local', cloud: null, user: null, identity: null, campaignId: null,
+  mode: 'local', cloud: null, cloudConfigured: false, cloudInitError: null, user: null, identity: null, campaignId: null,
   campaign: null, containers: [], items: [], history: [], unsubs: [], activeView: 'resumo', selectedItemIds: new Set(),
   channel: 'BroadcastChannel' in window ? new BroadcastChannel('old-helper-inventory-v3') : null
 };
@@ -176,8 +176,10 @@ function cloudError(error) {
 
 async function initCloud() {
   const configured = Boolean(firebaseConfig?.apiKey && firebaseConfig?.projectId);
+  state.cloudConfigured = configured;
   if (!configured) {
     state.mode = 'local';
+    state.cloudInitError = null;
     dom.connectionBadge.textContent = 'Modo local — pronto para demonstração';
     dom.connectionBadge.className = 'status-badge local';
     return;
@@ -188,7 +190,7 @@ async function initCloud() {
       import('https://www.gstatic.com/firebasejs/10.12.4/firebase-auth.js'),
       import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js')
     ]);
-    const app = appMod.initializeApp(firebaseConfig);
+    const app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(firebaseConfig);
     const auth = authMod.getAuth(app);
     let db;
     try {
@@ -199,6 +201,7 @@ async function initCloud() {
     }
     await authMod.signInAnonymously(auth);
     state.mode = 'cloud';
+    state.cloudInitError = null;
     state.user = auth.currentUser;
     state.cloud = { db, ...fsMod };
     dom.connectionBadge.textContent = 'Firebase ativo — sincronização em tempo real';
@@ -206,6 +209,7 @@ async function initCloud() {
   } catch (error) {
     console.error(error);
     state.mode = 'local';
+    state.cloudInitError = error;
     dom.connectionBadge.textContent = 'Firebase indisponível — usando modo local';
     dom.connectionBadge.className = 'status-badge error';
   }
@@ -350,11 +354,19 @@ async function createCampaign(name) {
   throw new Error('Não foi possível gerar um código único. Tente novamente.');
 }
 async function campaignExists(code) {
+  if (state.mode !== 'cloud' && state.cloudConfigured && state.cloudInitError) {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    await initCloud();
+  }
   if (state.mode === 'cloud') {
     const { db, doc, getDoc } = state.cloud;
     return (await getDoc(doc(db, 'campaigns', code))).exists();
   }
-  return Boolean(readLocal(code));
+  const existsLocally = Boolean(readLocal(code));
+  if (!existsLocally && state.cloudConfigured && state.cloudInitError) {
+    throw new Error('Não foi possível acessar o Firebase. Verifique sua conexão e tente novamente.');
+  }
+  return existsLocally;
 }
 async function enterCampaign(code) {
   const normalized = normalizeCode(code);
