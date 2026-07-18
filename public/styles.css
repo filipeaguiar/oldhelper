@@ -39,6 +39,8 @@ h1, h2, h3, p { margin-top: 0; }
 .access-card h2 { font-family: Georgia, serif; color: var(--wine); }
 label { display: grid; gap: 7px; color: var(--muted); font-weight: 750; font-size: 13px; }
 label + label { margin-top: 14px; }
+.field-label { display: inline-flex; align-items: center; gap: 7px; }
+.field-label > .ra, .charge-fieldset legend > .ra { color: var(--gold); }
 input, select, textarea { width: 100%; color: var(--ink); background: #fffdf8; border: 1px solid var(--line); border-radius: 11px; padding: 11px 12px; outline: none; transition: border .2s, box-shadow .2s; }
 input:focus, select:focus, textarea:focus { border-color: var(--wine-2); box-shadow: 0 0 0 3px rgba(146,42,49,.12); }
 small, .field-help { color: var(--muted); font-weight: 500; line-height: 1.4; font-size: 12px; }
@@ -126,6 +128,9 @@ small, .field-help { color: var(--muted); font-weight: 500; line-height: 1.4; fo
 .item-row.no-load.selected { background: rgba(112,27,34,.11); box-shadow: inset 4px 0 var(--green); }
 .container-tag { color: var(--green); background: rgba(76,118,88,.10); }
 .no-load-tag { color: #365b42; background: rgba(76,118,88,.14); }
+.usage-tag { color: var(--wine); background: rgba(112,27,34,.10); }
+.weight-meta { display: inline-flex; align-items: center; }
+.weight-meta > .ra { margin-right: .3em; color: #86611f; }
 .owner-tag { max-width: 100%; color: #74571c; background: rgba(179,139,53,.14); border: 1px solid rgba(179,139,53,.24); overflow-wrap: anywhere; }
 .item-select { display: flex; align-items: center; gap: 9px; margin: 0 0 4px; cursor: pointer; }
 .item-select input { width: auto; flex: 0 0 auto; }

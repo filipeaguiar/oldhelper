@@ -672,7 +672,7 @@ function renderSummary() {
     ['Ouro do grupo', formatNumber(currency.PO, 0), `${formatNumber(currency.PP,0)} PP · ${formatNumber(currency.PC,0)} PC`],
     ['Projéteis', formatNumber(ammo, 0), 'flechas, virotes e munições'],
     ['Rações', formatNumber(rations, 0), daily > 0 ? `aprox. ${autonomy} dia(s) para o grupo ativo` : 'nenhum consumo configurado'],
-    ['Cargas mágicas', formatNumber(charges, 0), `${formatNumber(magicItems,0)} item(ns) mágico(s)`],
+    ['Usos mágicos', formatNumber(charges, 0), `${formatNumber(magicItems,0)} item(ns) mágico(s)`],
     ['Portadores', formatNumber(state.containers.length, 0), `${state.containers.filter((h) => h.type === 'character').length} personagens · ${state.containers.filter((h) => h.type === 'animal').length} animais`],
     ['Sobrecarga', formatNumber(overloaded.length, 0), overloaded.length ? overloaded.map((holder) => holder.name).join(', ') : 'nenhum portador sobrecarregado']
   ];
@@ -757,10 +757,12 @@ function renderItemNode(item, visibleIds) {
 }
 function renderItem(item) {
   const icon = rpgIcon(categoryIcons[item.category] || 'ra-rune-stone');
-  const charges = num(item.maxCharges) > 0 ? `<span class="tag">${rpgIcon('ra-crystal-wand')} ${formatNumber(item.charges,0)}/${formatNumber(item.maxCharges,0)} cargas</span>` : '';
+  const charges = num(item.maxCharges) > 0 ? `<span class="tag usage-tag">${rpgIcon('ra-crystal-wand')} ${formatNumber(item.charges,0)}/${formatNumber(item.maxCharges,0)} usos</span>` : '';
   const hasNoLoad = itemHasNoLoad(item);
   const load = item.category === 'Moeda' ? '1 carga/100 moedas' : `${formatNumber(item.loadPerUnit)} carga/un.`;
-  const loadMeta = hasNoLoad ? '<span class="tag no-load-tag">sem carga</span>' : `<span>${esc(load)}</span>`;
+  const loadMeta = hasNoLoad
+    ? `<span class="tag no-load-tag weight-meta">${rpgIcon('ra-kettlebell')} sem peso</span>`
+    : `<span class="weight-meta">${rpgIcon('ra-kettlebell')} ${esc(load)}</span>`;
   const currentHolder = state.containers.find((holder) => holder.id === item.containerId);
   const originalOwner = currentHolder?.type === 'animal' ? state.containers.find((holder) => holder.id === item.originalOwnerId) : null;
   const ownerTag = originalOwner ? `<span class="tag owner-tag">Dono: ${esc(originalOwner.name)}</span>` : '';
