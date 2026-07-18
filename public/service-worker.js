@@ -1,7 +1,10 @@
-const CACHE = 'old-helper-v6';
+const CACHE = 'old-helper-v7';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './firebase-config.js',
-  './manifest.webmanifest', './icon.svg'
+  './manifest.webmanifest', './icon.svg', './icons/icon-192.png', './icons/icon-512.png',
+  './icons/icon-maskable-512.png', './vendor/rpg-awesome/css/rpg-awesome.min.css',
+  './vendor/rpg-awesome/fonts/rpgawesome-webfont.eot', './vendor/rpg-awesome/fonts/rpgawesome-webfont.svg',
+  './vendor/rpg-awesome/fonts/rpgawesome-webfont.ttf', './vendor/rpg-awesome/fonts/rpgawesome-webfont.woff'
 ];
 
 self.addEventListener('install', (event) => {

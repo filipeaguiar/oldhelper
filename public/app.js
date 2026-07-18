@@ -3,6 +3,7 @@ import { firebaseConfig } from './firebase-config.js';
 const $ = (id) => document.getElementById(id);
 const dom = {
   landing: $('landing'), app: $('app'), toast: $('toast'), connectionBadge: $('connectionBadge'),
+  installBanner: $('installBanner'), installBtn: $('installBtn'), dismissInstallBtn: $('dismissInstallBtn'),
   displayName: $('displayName'), userRole: $('userRole'), createForm: $('createForm'), joinForm: $('joinForm'),
   campaignName: $('campaignName'), joinCode: $('joinCode'),
   campaignTitle: $('campaignTitle'), campaignCode: $('campaignCode'), syncStatus: $('syncStatus'),
@@ -41,9 +42,51 @@ const state = {
   channel: 'BroadcastChannel' in window ? new BroadcastChannel('old-helper-inventory-v3') : null
 };
 
+const INSTALL_DISMISSED_KEY = 'oldHelperInstallDismissed';
+let deferredInstallPrompt = null;
+
+function isInstalledMode() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function installWasDismissed() {
+  try { return sessionStorage.getItem(INSTALL_DISMISSED_KEY) === 'true'; } catch { return false; }
+}
+function updateInstallBanner() {
+  const canInstall = Boolean(deferredInstallPrompt) && !isInstalledMode() && !installWasDismissed();
+  dom.installBanner.classList.toggle('hidden', !canInstall);
+  dom.installBtn.disabled = !canInstall;
+}
+function dismissInstallBanner() {
+  try { sessionStorage.setItem(INSTALL_DISMISSED_KEY, 'true'); } catch {}
+  deferredInstallPrompt = null;
+  updateInstallBanner();
+}
+async function requestAppInstall() {
+  if (!deferredInstallPrompt) return;
+  const promptEvent = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  updateInstallBanner();
+  try {
+    await promptEvent.prompt();
+    await promptEvent.userChoice;
+  } catch (error) {
+    console.warn('Não foi possível abrir o prompt de instalação.', error);
+  }
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  updateInstallBanner();
+});
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  updateInstallBanner();
+});
+
 const categoryIcons = {
-  'Arma': '⚔', 'Armadura': '🛡', 'Equipamento': '🎒', 'Munição': '➶', 'Ração': '🍞',
-  'Moeda': '◉', 'Consumível': '⚗', 'Item mágico': '✦', 'Tesouro': '◆', 'Outro': '•'
+  'Arma': 'ra-sword', 'Armadura': 'ra-shield', 'Equipamento': 'ra-ammo-bag', 'Munição': 'ra-arrow-flights', 'Ração': 'ra-apple',
+  'Moeda': 'ra-gold-bar', 'Consumível': 'ra-potion', 'Item mágico': 'ra-crystal-wand', 'Tesouro': 'ra-gem', 'Outro': 'ra-rune-stone'
 };
 
 function nowISO() { return new Date().toISOString(); }
@@ -84,6 +127,7 @@ function num(value, fallback = 0) {
 }
 function integer(value, fallback = 0) { return Math.max(0, Math.floor(num(value, fallback))); }
 function plural(value, singular, pluralForm = `${singular}s`) { return `${value} ${value === 1 ? singular : pluralForm}`; }
+function rpgIcon(iconClass) { return `<i class="ra ${iconClass}" aria-hidden="true"></i>`; }
 function toast(message, kind = '') {
   dom.toast.textContent = message;
   dom.toast.className = `toast show ${kind}`;
@@ -582,7 +626,7 @@ function renderDashboard() {
   dom.walletSummary.innerHTML = state.containers.length ? state.containers.map((holder) => {
     const wallet = holderWallet(holder.id);
     return `<div class="wallet-row"><div><div class="wallet-name">${esc(holder.name)}</div><div class="wallet-kind">${esc(holderKind(holder))}</div></div><div class="coin-stack"><span class="coin-pill">${formatNumber(wallet.PO,0)} PO</span><span class="coin-pill">${formatNumber(wallet.PP,0)} PP</span><span class="coin-pill">${formatNumber(wallet.PC,0)} PC</span></div></div>`;
-  }).join('') : '<div class="empty-state"><div>👥</div><h3>Configure o grupo</h3><p>Adicione um personagem ou animal de carga na tela Grupo para começar.</p></div>';
+  }).join('') : '<div class="empty-state"><div aria-hidden="true"><i class="ra ra-player"></i></div><h3>Configure o grupo</h3><p>Adicione um personagem ou animal de carga na tela Grupo para começar.</p></div>';
 
   const alerts = [];
   for (const holder of state.containers) {
@@ -597,7 +641,7 @@ function renderDashboard() {
   if (daily > 0 && totals.rations < daily * 3) alerts.push({ kind:'danger', text:`O estoque de rações dura menos de 3 dias para o grupo ativo.` });
   if (!state.containers.length) alerts.push({ kind:'', text:'O grupo está vazio. Adicione o primeiro personagem ou animal de carga.' });
   else if (!alerts.length) alerts.push({ kind:'ok', text:'Nenhum alerta importante no momento.' });
-  dom.alertsSummary.innerHTML = alerts.slice(0, 10).map((alert) => `<div class="alert-item ${alert.kind}"><span>${alert.kind === 'danger' ? '!' : alert.kind === 'ok' ? '✓' : '•'}</span><span>${esc(alert.text)}</span></div>`).join('');
+  dom.alertsSummary.innerHTML = alerts.slice(0, 10).map((alert) => `<div class="alert-item ${alert.kind}">${rpgIcon(alert.kind === 'danger' ? 'ra-skull' : alert.kind === 'ok' ? 'ra-health' : 'ra-ringing-bell')}<span>${esc(alert.text)}</span></div>`).join('');
 }
 
 function filteredItems() {
@@ -617,9 +661,9 @@ function filteredItems() {
 function updateBulkTransferButton() {
   const count = state.selectedItemIds.size;
   dom.bulkTransferBtn.disabled = count === 0;
-  dom.bulkTransferBtn.textContent = count
-    ? `⇄ Transferir ${plural(count, 'selecionado', 'selecionados')} para animal`
-    : '⇄ Transferir selecionados para animal';
+  dom.bulkTransferBtn.innerHTML = `${rpgIcon('ra-cycle')} ${count
+    ? `Transferir ${plural(count, 'selecionado', 'selecionados')} para animal`
+    : 'Transferir selecionados para animal'}`;
 }
 function renderInventory() {
   const existingIds = new Set(state.items.map((item) => item.id));
@@ -656,8 +700,8 @@ function renderItemNode(item, visibleIds) {
   return `<li class="item-node">${renderItem(item)}${children.length ? `<ul class="item-children">${children.map((child) => renderItemNode(child, visibleIds)).join('')}</ul>` : ''}</li>`;
 }
 function renderItem(item) {
-  const icon = categoryIcons[item.category] || '•';
-  const charges = num(item.maxCharges) > 0 ? `<span class="tag">✦ ${formatNumber(item.charges,0)}/${formatNumber(item.maxCharges,0)} cargas</span>` : '';
+  const icon = rpgIcon(categoryIcons[item.category] || 'ra-rune-stone');
+  const charges = num(item.maxCharges) > 0 ? `<span class="tag">${rpgIcon('ra-crystal-wand')} ${formatNumber(item.charges,0)}/${formatNumber(item.maxCharges,0)} cargas</span>` : '';
   const hasNoLoad = itemHasNoLoad(item);
   const load = item.category === 'Moeda' ? '1 carga/100 moedas' : `${formatNumber(item.loadPerUnit)} carga/un.`;
   const loadMeta = hasNoLoad ? '<span class="tag no-load-tag">sem carga</span>' : `<span>${esc(load)}</span>`;
@@ -665,7 +709,7 @@ function renderItem(item) {
   const originalOwner = currentHolder?.type === 'animal' ? state.containers.find((holder) => holder.id === item.originalOwnerId) : null;
   const ownerTag = originalOwner ? `<span class="tag owner-tag">Dono: ${esc(originalOwner.name)}</span>` : '';
   const selected = state.selectedItemIds.has(item.id);
-  return `<div class="item-row ${hasNoLoad ? 'no-load ' : ''}${selected ? 'selected' : ''}" data-id="${esc(item.id)}"><div><label class="item-select"><input type="checkbox" data-select-item value="${esc(item.id)}" ${selected ? 'checked' : ''}><span class="item-name">${icon} ${esc(item.name)}</span></label>${item.description ? `<p class="item-description">${esc(item.description)}</p>` : ''}<div class="item-meta"><span class="tag">${esc(item.category)}</span>${ownerTag}<span>${formatNumber(item.qty)} ${esc(item.unit || 'un.')}</span>${charges}${loadMeta}${item.isBackpack ? '<span class="tag">mochila equipada</span>' : ''}${item.isContainer ? '<span class="tag container-tag">▣ contêiner</span>' : ''}</div>${item.notes ? `<p class="item-notes"><strong>Observações:</strong> ${esc(item.notes)}</p>` : ''}</div><div class="item-actions"><div class="counter" aria-label="Quantidade"><button data-action="qty-minus" title="Diminuir">−</button><span>${formatNumber(item.qty)}</span><button data-action="qty-plus" title="Aumentar" ${item.isBackpack && num(item.qty) >= 1 ? 'disabled' : ''}>＋</button></div>${num(item.maxCharges) > 0 ? `<div class="counter" aria-label="Cargas"><button data-action="charge-minus" title="Usar carga">−</button><span>✦ ${formatNumber(item.charges,0)}</span><button data-action="charge-plus" title="Repor carga">＋</button></div>` : ''}<div class="mini-actions"><button class="mini-button" data-action="transfer" title="Transferir">⇄</button><button class="mini-button" data-action="edit" title="Editar">✎</button><button class="mini-button" data-action="delete" title="Excluir">×</button></div></div></div>`;
+  return `<div class="item-row ${hasNoLoad ? 'no-load ' : ''}${selected ? 'selected' : ''}" data-id="${esc(item.id)}"><div><label class="item-select"><input type="checkbox" data-select-item value="${esc(item.id)}" ${selected ? 'checked' : ''}><span class="item-name">${icon} ${esc(item.name)}</span></label>${item.description ? `<p class="item-description">${esc(item.description)}</p>` : ''}<div class="item-meta"><span class="tag">${esc(item.category)}</span>${ownerTag}<span>${formatNumber(item.qty)} ${esc(item.unit || 'un.')}</span>${charges}${loadMeta}${item.isBackpack ? '<span class="tag">mochila equipada</span>' : ''}${item.isContainer ? `<span class="tag container-tag">${rpgIcon('ra-locked-fortress')} contêiner</span>` : ''}</div>${item.notes ? `<p class="item-notes"><strong>Observações:</strong> ${esc(item.notes)}</p>` : ''}</div><div class="item-actions"><div class="counter" aria-label="Quantidade"><button data-action="qty-minus" title="Diminuir" aria-label="Diminuir quantidade">${rpgIcon('ra-health-decrease')}</button><span>${formatNumber(item.qty)}</span><button data-action="qty-plus" title="Aumentar" aria-label="Aumentar quantidade" ${item.isBackpack && num(item.qty) >= 1 ? 'disabled' : ''}>${rpgIcon('ra-health-increase')}</button></div>${num(item.maxCharges) > 0 ? `<div class="counter" aria-label="Cargas"><button data-action="charge-minus" title="Usar carga" aria-label="Usar carga">${rpgIcon('ra-health-decrease')}</button><span>${rpgIcon('ra-crystal-wand')} ${formatNumber(item.charges,0)}</span><button data-action="charge-plus" title="Repor carga" aria-label="Repor carga">${rpgIcon('ra-health-increase')}</button></div>` : ''}<div class="mini-actions"><button class="mini-button" data-action="transfer" title="Transferir" aria-label="Transferir item">${rpgIcon('ra-cycle')}</button><button class="mini-button" data-action="edit" title="Editar" aria-label="Editar item">${rpgIcon('ra-quill-ink')}</button><button class="mini-button" data-action="delete" title="Excluir" aria-label="Excluir item">${rpgIcon('ra-x-mark')}</button></div></div></div>`;
 }
 function bindInventoryActions() {
   dom.inventory.querySelectorAll('[data-select-item]').forEach((checkbox) => checkbox.addEventListener('change', (event) => {
@@ -840,7 +884,7 @@ function renderRationParticipants() {
   const checkedIds = new Set([...dom.rationParticipants.querySelectorAll('input:checked')].map((input) => input.value));
   const eligible = state.containers.filter((holder) => holder.consumesRations && num(holder.dailyRations) > 0);
   if (!eligible.length) {
-    dom.rationParticipants.innerHTML = `<div class="empty-state"><div>🍞</div><h3>${state.containers.length ? 'Nenhum consumo configurado' : 'Configure o grupo primeiro'}</h3><p>${state.containers.length ? 'Edite um integrante e informe seu consumo diário.' : 'Adicione um personagem ou animal antes de planejar ou comprar rações.'}</p></div>`;
+    dom.rationParticipants.innerHTML = `<div class="empty-state"><div aria-hidden="true"><i class="ra ra-apple"></i></div><h3>${state.containers.length ? 'Nenhum consumo configurado' : 'Configure o grupo primeiro'}</h3><p>${state.containers.length ? 'Edite um integrante e informe seu consumo diário.' : 'Adicione um personagem ou animal antes de planejar ou comprar rações.'}</p></div>`;
     return;
   }
   dom.rationParticipants.innerHTML = eligible.map((holder) => {
@@ -964,7 +1008,7 @@ async function purchaseRations() {
 
 function renderGroup() {
   if (!state.containers.length) {
-    dom.groupList.innerHTML = '<div class="empty-state"><div>👥</div><h3>Nenhum portador</h3><p>Adicione um personagem ou animal de carga.</p></div>';
+    dom.groupList.innerHTML = '<div class="empty-state"><div aria-hidden="true"><i class="ra ra-player"></i></div><h3>Nenhum portador</h3><p>Adicione um personagem ou animal de carga.</p></div>';
     return;
   }
   dom.groupList.innerHTML = state.containers.map((holder) => {
@@ -1149,7 +1193,12 @@ function switchView(view, updateHash = true) {
   const valid = ['resumo','inventario','racoes','grupo','historico'];
   const next = valid.includes(view) ? view : 'resumo';
   state.activeView = next;
-  document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('active', button.dataset.view === next));
+  document.querySelectorAll('[data-view]').forEach((button) => {
+    const isActive = button.dataset.view === next;
+    button.classList.toggle('active', isActive);
+    if (isActive) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
   document.querySelectorAll('[data-view-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.viewPanel === next));
   if (updateHash) {
     const url = new URL(location.href);
@@ -1183,6 +1232,8 @@ function bindEvents() {
   });
   dom.leaveBtn.addEventListener('click', leaveCampaign);
   dom.settingsBtn.addEventListener('click', openSettings);
+  dom.installBtn.addEventListener('click', requestAppInstall);
+  dom.dismissInstallBtn.addEventListener('click', dismissInstallBanner);
   document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.view)));
   document.querySelectorAll('[data-go-view]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.goView)));
   window.addEventListener('hashchange', () => switchView(location.hash.slice(1), false));

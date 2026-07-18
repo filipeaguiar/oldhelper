@@ -8,14 +8,28 @@
   <title>Old Helper — Carga do Grupo</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <link rel="stylesheet" href="vendor/rpg-awesome/css/rpg-awesome.min.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+  <aside id="installBanner" class="install-banner card hidden" aria-labelledby="installTitle">
+    <i class="ra ra-save install-banner-icon" aria-hidden="true"></i>
+    <div class="install-banner-copy">
+      <strong id="installTitle">Instalar Old Helper</strong>
+      <span>Acesse suas campanhas como um aplicativo e mantenha a interface disponível offline.</span>
+    </div>
+    <div class="install-banner-actions">
+      <button id="dismissInstallBtn" class="button ghost small" type="button">Agora não</button>
+      <button id="installBtn" class="button primary small" type="button"><i class="ra ra-save" aria-hidden="true"></i> Instalar</button>
+    </div>
+  </aside>
+
   <main id="landing" class="landing page">
     <section class="hero-panel">
-      <div class="brand-mark" aria-hidden="true">⚔</div>
+      <div class="brand-mark" aria-hidden="true"><i class="ra ra-crossed-swords"></i></div>
       <p class="eyebrow">OLD HELPER</p>
       <h1>Carga do Grupo</h1>
       <p class="lead">Inventário, tesouro, rações, munições e cargas mágicas compartilhados entre jogadores e Mestre.</p>
@@ -68,17 +82,17 @@
         </div>
       </div>
       <div class="top-actions">
-        <button id="settingsBtn" class="icon-button" type="button" title="Configurações" aria-label="Configurações">⚙</button>
+        <button id="settingsBtn" class="icon-button" type="button" title="Configurações" aria-label="Configurações"><i class="ra ra-cog" aria-hidden="true"></i></button>
         <button id="leaveBtn" class="button ghost" type="button">Sair</button>
       </div>
     </header>
 
     <nav class="section-nav card" aria-label="Áreas do aplicativo">
-      <button type="button" data-view="resumo" class="active">Resumo</button>
-      <button type="button" data-view="inventario">Inventário</button>
-      <button type="button" data-view="racoes">Rações e compras</button>
-      <button type="button" data-view="grupo">Grupo</button>
-      <button type="button" data-view="historico">Histórico</button>
+      <button type="button" data-view="resumo" class="active" aria-current="page" aria-label="Resumo" title="Resumo"><i class="ra ra-scroll-unfurled" aria-hidden="true"></i></button>
+      <button type="button" data-view="inventario" aria-label="Inventário" title="Inventário"><i class="ra ra-ammo-bag" aria-hidden="true"></i></button>
+      <button type="button" data-view="racoes" aria-label="Rações e compras" title="Rações e compras"><i class="ra ra-apple" aria-hidden="true"></i></button>
+      <button type="button" data-view="grupo" aria-label="Grupo" title="Grupo"><i class="ra ra-player" aria-hidden="true"></i></button>
+      <button type="button" data-view="historico" aria-label="Histórico" title="Histórico"><i class="ra ra-book" aria-hidden="true"></i></button>
     </nav>
 
     <section class="app-view active" data-view-panel="resumo">
@@ -124,8 +138,8 @@
           <span>Portador</span>
           <select id="containerFilter"><option value="">Todos</option></select>
         </label>
-        <button id="bulkTransferBtn" class="button secondary bulk-transfer-button" type="button" disabled>⇄ Transferir selecionados para animal</button>
-        <button id="addItemBtn" class="button primary add-button" type="button">＋ Adicionar item</button>
+        <button id="bulkTransferBtn" class="button secondary bulk-transfer-button" type="button" disabled><i class="ra ra-cycle" aria-hidden="true"></i> Transferir selecionados para animal</button>
+        <button id="addItemBtn" class="button primary add-button" type="button"><i class="ra ra-health-increase" aria-hidden="true"></i> Adicionar item</button>
       </section>
       <section id="inventory" class="inventory-grid" aria-live="polite"></section>
     </section>
@@ -186,8 +200,8 @@
           <p>Adicione, edite ou remova integrantes. Ao remover alguém com itens, o aplicativo solicita um destino para transferir todo o conteúdo.</p>
         </div>
         <div class="group-actions">
-          <button id="addCharacterBtn" class="button secondary" type="button">＋ Personagem</button>
-          <button id="addAnimalBtn" class="button primary" type="button">＋ Animal de carga</button>
+          <button id="addCharacterBtn" class="button secondary" type="button"><i class="ra ra-health-increase" aria-hidden="true"></i> Personagem</button>
+          <button id="addAnimalBtn" class="button primary" type="button"><i class="ra ra-health-increase" aria-hidden="true"></i> Animal de carga</button>
         </div>
       </section>
       <section id="groupList" class="group-grid"></section>
@@ -208,7 +222,7 @@
     <form id="itemForm" method="dialog" class="dialog-form">
       <div class="dialog-heading">
         <div><p class="eyebrow">INVENTÁRIO</p><h2 id="itemDialogTitle">Adicionar item</h2></div>
-        <button class="dialog-close" value="cancel" aria-label="Fechar">×</button>
+        <button class="dialog-close" value="cancel" aria-label="Fechar"><i class="ra ra-x-mark" aria-hidden="true"></i></button>
       </div>
       <input id="itemId" type="hidden" />
       <div class="form-grid two-columns">
@@ -268,7 +282,7 @@
     <form id="transferForm" method="dialog" class="dialog-form">
       <div class="dialog-heading">
         <div><p class="eyebrow">TRANSFERÊNCIA</p><h2 id="transferItemName">Transferir item</h2></div>
-        <button class="dialog-close" value="cancel" type="button" data-close-dialog aria-label="Fechar">×</button>
+        <button class="dialog-close" value="cancel" type="button" data-close-dialog aria-label="Fechar"><i class="ra ra-x-mark" aria-hidden="true"></i></button>
       </div>
       <input id="transferItemId" type="hidden" />
       <p id="transferSummary" class="dialog-copy"></p>
@@ -292,7 +306,7 @@
     <form id="holderForm" method="dialog" class="dialog-form">
       <div class="dialog-heading">
         <div><p class="eyebrow">GRUPO</p><h2 id="holderDialogTitle">Adicionar portador</h2></div>
-        <button class="dialog-close" value="cancel" aria-label="Fechar">×</button>
+        <button class="dialog-close" value="cancel" aria-label="Fechar"><i class="ra ra-x-mark" aria-hidden="true"></i></button>
       </div>
       <input id="holderId" type="hidden" />
       <div class="form-grid two-columns">
@@ -344,7 +358,7 @@
     <form id="removeHolderForm" method="dialog" class="dialog-form">
       <div class="dialog-heading">
         <div><p class="eyebrow">REMOÇÃO SEGURA</p><h2>Remover portador</h2></div>
-        <button class="dialog-close" value="cancel" aria-label="Fechar">×</button>
+        <button class="dialog-close" value="cancel" aria-label="Fechar"><i class="ra ra-x-mark" aria-hidden="true"></i></button>
       </div>
       <input id="removeHolderId" type="hidden" />
       <p id="removeHolderMessage" class="dialog-copy"></p>
@@ -362,7 +376,7 @@
     <form id="settingsForm" method="dialog" class="dialog-form">
       <div class="dialog-heading">
         <div><p class="eyebrow">CAMPANHA</p><h2>Configurações</h2></div>
-        <button class="dialog-close" value="cancel" aria-label="Fechar">×</button>
+        <button class="dialog-close" value="cancel" aria-label="Fechar"><i class="ra ra-x-mark" aria-hidden="true"></i></button>
       </div>
       <label>Nome da campanha
         <input id="settingsCampaignName" maxlength="60" required />
@@ -383,7 +397,7 @@
 
   <template id="emptyTemplate">
     <div class="empty-state">
-      <div aria-hidden="true">🧳</div>
+      <div aria-hidden="true"><i class="ra ra-load"></i></div>
       <h3>Configure o grupo primeiro</h3>
       <p>Adicione um personagem ou animal de carga na tela Grupo antes de cadastrar itens.</p>
     </div>
