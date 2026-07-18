@@ -1011,12 +1011,18 @@ function renderGroup() {
     dom.groupList.innerHTML = '<div class="empty-state"><div aria-hidden="true"><i class="ra ra-player"></i></div><h3>Nenhum portador</h3><p>Adicione um personagem ou animal de carga.</p></div>';
     return;
   }
-  dom.groupList.innerHTML = state.containers.map((holder) => {
+  const renderHolderCard = (holder) => {
     const wallet = holderWallet(holder.id);
     const itemCount = state.items.filter((item) => item.containerId === holder.id).length;
     const load = containerLoad(holder.id); const capacity = containerCapacity(holder);
     return `<article class="card group-card" data-id="${esc(holder.id)}"><div class="group-card-header"><div><h3>${esc(holder.name)}</h3><div class="group-type">${esc(holderKind(holder))}${holder.player ? ` · ${esc(holder.player)}` : ''}</div></div><span class="group-status ${holder.active ? '' : 'inactive'}">${holder.active ? 'Ativo' : 'Fora da viagem'}</span></div><div class="group-metrics"><div class="metric"><span>Carga</span><strong>${formatNumber(load)} / ${formatNumber(capacity)}</strong></div><div class="metric"><span>Itens</span><strong>${formatNumber(itemCount,0)}</strong></div><div class="metric"><span>Rações/dia</span><strong>${holder.consumesRations ? formatNumber(holder.dailyRations) : '—'}</strong></div><div class="metric"><span>Moedas</span><strong>${formatNumber(wallet.PO,0)} PO</strong></div></div><div class="coin-stack" style="justify-content:flex-start"><span class="coin-pill">${formatNumber(wallet.PO,0)} PO</span><span class="coin-pill">${formatNumber(wallet.PP,0)} PP</span><span class="coin-pill">${formatNumber(wallet.PC,0)} PC</span></div><div class="group-card-actions"><button class="button secondary small" data-holder-action="edit">Editar</button><button class="button ghost small" data-holder-action="remove">Remover</button></div></article>`;
-  }).join('');
+  };
+  const groups = [
+    { title:'Animais de carga', holders:state.containers.filter((holder) => holder.type === 'animal') },
+    { title:'Personagens', holders:state.containers.filter((holder) => holder.type === 'character') },
+    { title:'Depósitos', holders:state.containers.filter((holder) => holder.type === 'stash') }
+  ];
+  dom.groupList.innerHTML = groups.filter((group) => group.holders.length).map((group) => `<section class="group-section"><div class="group-section-heading"><h2>${group.title}</h2><span>${formatNumber(group.holders.length, 0)}</span></div><div class="group-section-grid">${group.holders.map(renderHolderCard).join('')}</div></section>`).join('');
   dom.groupList.querySelectorAll('[data-holder-action]').forEach((button) => button.addEventListener('click', (event) => {
     const holder = state.containers.find((candidate) => candidate.id === event.currentTarget.closest('[data-id]')?.dataset.id);
     if (!holder) return;
