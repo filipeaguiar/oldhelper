@@ -567,9 +567,12 @@ function containerCapacity(container) {
 function itemHasNoLoad(item) {
   return item.category !== 'Moeda' && num(item.loadPerUnit) === 0;
 }
+function inventoryItemDisplayRank(item) {
+  if (item.isContainer) return 1;
+  return itemHasNoLoad(item) ? 2 : 0;
+}
 function compareInventoryItems(a, b) {
-  const rank = (item) => itemHasNoLoad(item) ? (item.isContainer ? 1 : 2) : 0;
-  return rank(a) - rank(b) || a.name.localeCompare(b.name, 'pt-BR');
+  return inventoryItemDisplayRank(a) - inventoryItemDisplayRank(b) || a.name.localeCompare(b.name, 'pt-BR');
 }
 function originalOwnerAfterTransfer(item, targetContainerId) {
   const originHolder = state.containers.find((holder) => holder.id === item.containerId);

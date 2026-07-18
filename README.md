@@ -167,7 +167,7 @@ firebase deploy --only firestore:rules
 3. Ao adicionar, editar ou transferir outro item, selecione o recipiente no campo **Guardado em**.
 4. O conteúdo aparecerá recuado abaixo do item contêiner e continuará contando para a carga e os totais do portador principal.
 
-Contêineres podem ser aninhados em vários níveis e são transferidos junto com todo o seu conteúdo. Para evitar perda acidental, um contêiner não pode ser desmarcado nem excluído enquanto possuir itens. Esta versão não aplica capacidade máxima, redução de carga ou regras dimensionais aos recipientes.
+Dentro de cada portador ou item contêiner, o inventário mostra primeiro os itens comuns com carga, depois os itens que funcionam como contêineres e, por fim, os demais itens sem carga. Contêineres podem ser aninhados em vários níveis e são transferidos junto com todo o seu conteúdo. Para evitar perda acidental, um contêiner não pode ser desmarcado nem excluído enquanto possuir itens. Esta versão não aplica capacidade máxima, redução de carga ou regras dimensionais aos recipientes.
 
 ## Como registrar ouro no animal de carga
 
