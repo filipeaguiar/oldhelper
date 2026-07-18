@@ -264,6 +264,30 @@
     </form>
   </dialog>
 
+  <dialog id="transferDialog">
+    <form id="transferForm" method="dialog" class="dialog-form">
+      <div class="dialog-heading">
+        <div><p class="eyebrow">TRANSFERÊNCIA</p><h2 id="transferItemName">Transferir item</h2></div>
+        <button class="dialog-close" value="cancel" type="button" data-close-dialog aria-label="Fechar">×</button>
+      </div>
+      <input id="transferItemId" type="hidden" />
+      <p id="transferSummary" class="dialog-copy"></p>
+      <fieldset class="transfer-destination-fieldset">
+        <legend>Escolha o destino</legend>
+        <div id="transferDestinations" class="transfer-destinations"></div>
+      </fieldset>
+      <label id="transferQuantityField" class="transfer-quantity-field">Quantidade a transferir
+        <input id="transferQuantity" type="number" min="1" step="1" required />
+        <small id="transferQuantityHelp"></small>
+      </label>
+      <div id="transferContentsWarning" class="rule-note hidden"></div>
+      <div class="dialog-actions transfer-dialog-actions">
+        <button class="button ghost" value="cancel" type="button" data-close-dialog>Cancelar</button>
+        <button class="button primary" value="default" type="submit">Transferir</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="holderDialog">
     <form id="holderForm" method="dialog" class="dialog-form">
       <div class="dialog-heading">

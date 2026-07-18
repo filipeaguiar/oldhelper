@@ -19,6 +19,10 @@ const dom = {
   itemName: $('itemName'), itemDescription: $('itemDescription'), itemCategory: $('itemCategory'), itemContainer: $('itemContainer'),
   itemQty: $('itemQty'), itemUnit: $('itemUnit'), itemLoad: $('itemLoad'), itemBackpack: $('itemBackpack'),
   itemIsContainer: $('itemIsContainer'), itemCharges: $('itemCharges'), itemMaxCharges: $('itemMaxCharges'), itemNotes: $('itemNotes'),
+  transferDialog: $('transferDialog'), transferForm: $('transferForm'), transferItemId: $('transferItemId'),
+  transferItemName: $('transferItemName'), transferSummary: $('transferSummary'), transferDestinations: $('transferDestinations'),
+  transferQuantityField: $('transferQuantityField'), transferQuantity: $('transferQuantity'),
+  transferQuantityHelp: $('transferQuantityHelp'), transferContentsWarning: $('transferContentsWarning'),
   holderDialog: $('holderDialog'), holderForm: $('holderForm'), holderDialogTitle: $('holderDialogTitle'), holderId: $('holderId'),
   holderName: $('holderName'), holderType: $('holderType'), holderSubtype: $('holderSubtype'), holderPlayer: $('holderPlayer'),
   holderStrength: $('holderStrength'), holderConstitution: $('holderConstitution'), holderCapacity: $('holderCapacity'),
@@ -181,6 +185,7 @@ function normalizeItem(raw) {
     qty: Math.max(0, num(raw.qty, 0)), unit: raw.unit || 'un.',
     loadPerUnit: Math.max(0, num(raw.loadPerUnit, 0)), isBackpack: Boolean(raw.isBackpack),
     charges: Math.max(0, num(raw.charges, 0)), maxCharges: Math.max(0, num(raw.maxCharges, 0)), notes: raw.notes || '',
+    originalOwnerId: typeof raw.originalOwnerId === 'string' ? raw.originalOwnerId : '',
     updatedAt: raw.updatedAt || nowISO(), updatedBy: raw.updatedBy || ''
   };
 }
@@ -467,6 +472,16 @@ function containerCapacity(container) {
   const hasBackpack = state.items.some((item) => item.containerId === container.id && !item.parentItemId && item.isBackpack && num(item.qty) > 0);
   return base + (hasBackpack ? 5 : 0);
 }
+function itemHasNoLoad(item) {
+  return item.category !== 'Moeda' && num(item.loadPerUnit) === 0;
+}
+function originalOwnerAfterTransfer(item, targetContainerId) {
+  const originHolder = state.containers.find((holder) => holder.id === item.containerId);
+  const targetHolder = state.containers.find((holder) => holder.id === targetContainerId);
+  if (targetHolder?.type !== 'animal') return '';
+  if (originHolder?.type === 'animal') return item.originalOwnerId || '';
+  return originHolder?.id || '';
+}
 function containerLoad(containerId) {
   const items = state.items.filter((item) => item.containerId === containerId);
   const coins = items.filter((item) => item.category === 'Moeda').reduce((sum, item) => sum + num(item.qty), 0);
@@ -643,9 +658,14 @@ function renderItemNode(item, visibleIds) {
 function renderItem(item) {
   const icon = categoryIcons[item.category] || '•';
   const charges = num(item.maxCharges) > 0 ? `<span class="tag">✦ ${formatNumber(item.charges,0)}/${formatNumber(item.maxCharges,0)} cargas</span>` : '';
+  const hasNoLoad = itemHasNoLoad(item);
   const load = item.category === 'Moeda' ? '1 carga/100 moedas' : `${formatNumber(item.loadPerUnit)} carga/un.`;
+  const loadMeta = hasNoLoad ? '<span class="tag no-load-tag">sem carga</span>' : `<span>${esc(load)}</span>`;
+  const currentHolder = state.containers.find((holder) => holder.id === item.containerId);
+  const originalOwner = currentHolder?.type === 'animal' ? state.containers.find((holder) => holder.id === item.originalOwnerId) : null;
+  const ownerTag = originalOwner ? `<span class="tag owner-tag">Dono: ${esc(originalOwner.name)}</span>` : '';
   const selected = state.selectedItemIds.has(item.id);
-  return `<div class="item-row ${selected ? 'selected' : ''}" data-id="${esc(item.id)}"><div><label class="item-select"><input type="checkbox" data-select-item value="${esc(item.id)}" ${selected ? 'checked' : ''}><span class="item-name">${icon} ${esc(item.name)}</span></label>${item.description ? `<p class="item-description">${esc(item.description)}</p>` : ''}<div class="item-meta"><span class="tag">${esc(item.category)}</span><span>${formatNumber(item.qty)} ${esc(item.unit || 'un.')}</span>${charges}<span>${esc(load)}</span>${item.isBackpack ? '<span class="tag">mochila equipada</span>' : ''}${item.isContainer ? '<span class="tag container-tag">▣ contêiner</span>' : ''}</div>${item.notes ? `<p class="item-notes"><strong>Observações:</strong> ${esc(item.notes)}</p>` : ''}</div><div class="item-actions"><div class="counter" aria-label="Quantidade"><button data-action="qty-minus" title="Diminuir">−</button><span>${formatNumber(item.qty)}</span><button data-action="qty-plus" title="Aumentar" ${item.isBackpack && num(item.qty) >= 1 ? 'disabled' : ''}>＋</button></div>${num(item.maxCharges) > 0 ? `<div class="counter" aria-label="Cargas"><button data-action="charge-minus" title="Usar carga">−</button><span>✦ ${formatNumber(item.charges,0)}</span><button data-action="charge-plus" title="Repor carga">＋</button></div>` : ''}<div class="mini-actions"><button class="mini-button" data-action="transfer" title="Transferir">⇄</button><button class="mini-button" data-action="edit" title="Editar">✎</button><button class="mini-button" data-action="delete" title="Excluir">×</button></div></div></div>`;
+  return `<div class="item-row ${hasNoLoad ? 'no-load ' : ''}${selected ? 'selected' : ''}" data-id="${esc(item.id)}"><div><label class="item-select"><input type="checkbox" data-select-item value="${esc(item.id)}" ${selected ? 'checked' : ''}><span class="item-name">${icon} ${esc(item.name)}</span></label>${item.description ? `<p class="item-description">${esc(item.description)}</p>` : ''}<div class="item-meta"><span class="tag">${esc(item.category)}</span>${ownerTag}<span>${formatNumber(item.qty)} ${esc(item.unit || 'un.')}</span>${charges}${loadMeta}${item.isBackpack ? '<span class="tag">mochila equipada</span>' : ''}${item.isContainer ? '<span class="tag container-tag">▣ contêiner</span>' : ''}</div>${item.notes ? `<p class="item-notes"><strong>Observações:</strong> ${esc(item.notes)}</p>` : ''}</div><div class="item-actions"><div class="counter" aria-label="Quantidade"><button data-action="qty-minus" title="Diminuir">−</button><span>${formatNumber(item.qty)}</span><button data-action="qty-plus" title="Aumentar" ${item.isBackpack && num(item.qty) >= 1 ? 'disabled' : ''}>＋</button></div>${num(item.maxCharges) > 0 ? `<div class="counter" aria-label="Cargas"><button data-action="charge-minus" title="Usar carga">−</button><span>✦ ${formatNumber(item.charges,0)}</span><button data-action="charge-plus" title="Repor carga">＋</button></div>` : ''}<div class="mini-actions"><button class="mini-button" data-action="transfer" title="Transferir">⇄</button><button class="mini-button" data-action="edit" title="Editar">✎</button><button class="mini-button" data-action="delete" title="Excluir">×</button></div></div></div>`;
 }
 function bindInventoryActions() {
   dom.inventory.querySelectorAll('[data-select-item]').forEach((checkbox) => checkbox.addEventListener('change', (event) => {
@@ -664,33 +684,112 @@ function bindInventoryActions() {
       if (action === 'charge-plus') await patchItem(item.id, { charges:Math.min(num(item.maxCharges), num(item.charges) + 1) }, `${state.identity.name} ajustou as cargas de “${item.name}”.`);
       if (action === 'edit') openItemDialog(item);
       if (action === 'delete') await deleteItem(item.id);
-      if (action === 'transfer') await transferItem(item);
+      if (action === 'transfer') openTransferDialog(item);
     } catch (error) { cloudError(error); }
   }));
 }
-async function transferItem(item) {
+function transferDestinationDetails(choice) {
+  const holder = state.containers.find((candidate) => candidate.id === choice.containerId);
+  if (choice.parentItemId) {
+    const containerItem = state.items.find((candidate) => candidate.id === choice.parentItemId);
+    return { name:containerItem?.name || choice.label.trim(), kind:`Item contêiner · ${holder?.name || 'portador desconhecido'}` };
+  }
+  return { name:holder?.name || choice.label.trim(), kind:holder ? holderKind(holder) : 'Portador' };
+}
+function openTransferDialog(item) {
   const currentValue = destinationValue(item);
   const choices = destinationChoices(item.id).filter((choice) => choice.value !== currentValue);
   if (!choices.length) return toast('Não há outro destino válido para este item.', 'error');
-  const answer = prompt(`Transferir “${item.name}” para:\n${choices.map((choice,index) => `${index + 1}. ${choice.label}`).join('\n')}\n\nDigite o número:`);
-  const target = choices[Number(answer) - 1]; if (!target) return;
+
+  const currentHolder = state.containers.find((holder) => holder.id === item.containerId);
+  const ownerDestination = currentHolder?.type === 'animal' && item.originalOwnerId ? `holder:${item.originalOwnerId}` : '';
+  const preferred = choices.find((choice) => ownerDestination && choice.value === ownerDestination && !choice.parentItemId)
+    || choices.find((choice) => !choice.parentItemId && state.containers.some((holder) => holder.id === choice.containerId && holder.type === 'animal'))
+    || choices[0];
+  dom.transferItemId.value = item.id;
+  dom.transferItemName.textContent = `Transferir “${item.name}”`;
+  const originItem = state.items.find((candidate) => candidate.id === item.parentItemId);
+  const originHolder = state.containers.find((holder) => holder.id === item.containerId);
+  dom.transferSummary.textContent = `Origem: ${originItem?.name || originHolder?.name || 'outro destino'} · Disponível: ${formatNumber(item.qty, 0)} ${item.unit || 'un.'}`;
+  dom.transferDestinations.innerHTML = choices.map((choice) => {
+    const details = transferDestinationDetails(choice);
+    return `<label class="transfer-destination-option"><input type="radio" name="transferDestination" value="${esc(choice.value)}" ${choice.value === preferred.value ? 'checked' : ''}><span><strong>${esc(details.name)}</strong><small>${esc(details.kind)}</small></span></label>`;
+  }).join('');
+
+  const descendants = itemDescendants(item.id);
+  const available = integer(item.qty);
+  const canSplit = available > 1 && descendants.length === 0;
+  dom.transferQuantityField.classList.toggle('hidden', !canSplit);
+  dom.transferQuantity.min = '1';
+  dom.transferQuantity.max = String(available);
+  dom.transferQuantity.value = String(available);
+  dom.transferQuantity.disabled = !canSplit;
+  dom.transferQuantityHelp.textContent = canSplit ? `Escolha entre 1 e ${formatNumber(available, 0)} ${item.unit || 'un.'}.` : '';
+  dom.transferContentsWarning.classList.toggle('hidden', descendants.length === 0);
+  dom.transferContentsWarning.textContent = descendants.length
+    ? `${plural(descendants.length, 'item contido será transferido', 'itens contidos serão transferidos')} junto. Este item não pode ser dividido.`
+    : '';
+  dom.transferDialog.showModal();
+}
+
+async function executeItemTransfer() {
+  const item = state.items.find((candidate) => candidate.id === dom.transferItemId.value);
+  if (!item) throw new Error('O item não está mais disponível.');
+  const selectedValue = dom.transferForm.querySelector('input[name="transferDestination"]:checked')?.value;
+  if (!selectedValue || selectedValue === destinationValue(item)) throw new Error('Escolha um destino válido.');
+  const target = resolveDestination(selectedValue, item.id);
   validateBackpack(item, target.containerId, target.parentItemId);
+
+  const descendants = itemDescendants(item.id);
+  const available = integer(item.qty);
+  const canSplit = available > 1 && descendants.length === 0;
+  const quantity = canSplit ? Number(dom.transferQuantity.value) : available;
+  if (canSplit && (!Number.isInteger(quantity) || quantity < 1 || quantity > available)) {
+    throw new Error(`Informe uma quantidade inteira entre 1 e ${available}.`);
+  }
+  const partial = canSplit && quantity < available;
   const originItem = state.items.find((candidate) => candidate.id === item.parentItemId);
   const originHolder = state.containers.find((holder) => holder.id === item.containerId);
   const originLabel = originItem?.name || originHolder?.name || 'outro destino';
-  const descendants = itemDescendants(item.id);
+  const targetDetails = transferDestinationDetails(target);
+  const transferredOwnerId = originalOwnerAfterTransfer(item, target.containerId);
+
   if (state.mode === 'cloud') {
-    const { db, doc, writeBatch, serverTimestamp } = state.cloud;
+    const { db, doc, collection, writeBatch, serverTimestamp } = state.cloud;
     const batch = writeBatch(db);
-    batch.update(doc(db, 'campaigns', state.campaignId, 'items', item.id), { containerId:target.containerId, parentItemId:target.parentItemId, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
-    for (const child of descendants) batch.update(doc(db, 'campaigns', state.campaignId, 'items', child.id), { containerId:target.containerId, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+    const itemRef = doc(db, 'campaigns', state.campaignId, 'items', item.id);
+    if (partial) {
+      const newRef = doc(collection(db, 'campaigns', state.campaignId, 'items'));
+      const newItem = {
+        ...item, qty:quantity, containerId:target.containerId, parentItemId:target.parentItemId,
+        originalOwnerId:transferredOwnerId, updatedAt:serverTimestamp(), updatedBy:state.identity.name
+      };
+      delete newItem.id;
+      batch.update(itemRef, { qty:available - quantity, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+      batch.set(newRef, newItem);
+    } else {
+      batch.update(itemRef, { containerId:target.containerId, parentItemId:target.parentItemId, originalOwnerId:transferredOwnerId, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+      for (const child of descendants) batch.update(doc(db, 'campaigns', state.campaignId, 'items', child.id), { containerId:target.containerId, originalOwnerId:originalOwnerAfterTransfer(child, target.containerId), updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+    }
     await batch.commit();
+  } else if (partial) {
+    const timestamp = nowISO();
+    Object.assign(item, { qty:available - quantity, updatedAt:timestamp, updatedBy:state.identity.name });
+    state.items.push({
+      ...item, id:uid('item'), qty:quantity, containerId:target.containerId, parentItemId:target.parentItemId,
+      originalOwnerId:transferredOwnerId, updatedAt:timestamp, updatedBy:state.identity.name
+    });
+    writeLocal(); renderAll();
   } else {
-    Object.assign(item, { containerId:target.containerId, parentItemId:target.parentItemId, updatedAt:nowISO(), updatedBy:state.identity.name });
-    for (const child of descendants) Object.assign(child, { containerId:target.containerId, updatedAt:nowISO(), updatedBy:state.identity.name });
+    Object.assign(item, { containerId:target.containerId, parentItemId:target.parentItemId, originalOwnerId:transferredOwnerId, updatedAt:nowISO(), updatedBy:state.identity.name });
+    for (const child of descendants) Object.assign(child, { containerId:target.containerId, originalOwnerId:originalOwnerAfterTransfer(child, target.containerId), updatedAt:nowISO(), updatedBy:state.identity.name });
     writeLocal(); renderAll();
   }
-  await addHistory(`${state.identity.name} transferiu “${item.name}”${descendants.length ? ` com ${plural(descendants.length, 'item contido', 'itens contidos')}` : ''} de ${originLabel} para ${target.label.trim()}.`);
+
+  const quantityText = `${formatNumber(quantity, 0)} ${item.unit || 'un.'}`;
+  const contentsText = descendants.length ? ` com ${plural(descendants.length, 'item contido', 'itens contidos')}` : '';
+  await addHistory(`${state.identity.name} transferiu ${quantityText} de “${item.name}”${contentsText} de ${originLabel} para ${targetDetails.name}.`);
+  toast(`${quantityText} de “${item.name}” transferido para ${targetDetails.name}.`);
 }
 async function bulkTransferToAnimal() {
   const selectedItems = state.items.filter((item) => state.selectedItemIds.has(item.id));
@@ -718,14 +817,15 @@ async function bulkTransferToAnimal() {
     const { db, doc, writeBatch, serverTimestamp } = state.cloud;
     const batch = writeBatch(db);
     for (const { item, root } of changes.values()) {
-      const patch = { containerId:target.id, updatedAt:serverTimestamp(), updatedBy:state.identity.name };
+      const patch = { containerId:target.id, originalOwnerId:originalOwnerAfterTransfer(item, target.id), updatedAt:serverTimestamp(), updatedBy:state.identity.name };
       if (root) patch.parentItemId = '';
       batch.update(doc(db, 'campaigns', state.campaignId, 'items', item.id), patch);
     }
     await batch.commit();
   } else {
     for (const { item, root } of changes.values()) Object.assign(item, {
-      containerId:target.id, ...(root ? { parentItemId:'' } : {}), updatedAt:nowISO(), updatedBy:state.identity.name
+      containerId:target.id, originalOwnerId:originalOwnerAfterTransfer(item, target.id),
+      ...(root ? { parentItemId:'' } : {}), updatedAt:nowISO(), updatedBy:state.identity.name
     });
     writeLocal();
   }
@@ -907,12 +1007,14 @@ function openItemDialog(item = null) {
 function itemFromForm() {
   const maxCharges = Math.max(0, num(dom.itemMaxCharges.value));
   const destination = resolveDestination(dom.itemContainer.value, dom.itemId.value);
+  const existing = state.items.find((item) => item.id === dom.itemId.value);
   return normalizeItem({
     id:dom.itemId.value || null, name:dom.itemName.value.trim(), description:dom.itemDescription.value.trim(), category:dom.itemCategory.value,
     containerId:destination.containerId, parentItemId:destination.parentItemId, isContainer:dom.itemIsContainer.checked,
     qty:Math.max(0, num(dom.itemQty.value)), unit:dom.itemUnit.value,
     loadPerUnit:Math.max(0, num(dom.itemLoad.value)), isBackpack:dom.itemBackpack.checked,
-    charges:Math.min(maxCharges, Math.max(0, num(dom.itemCharges.value))), maxCharges, notes:dom.itemNotes.value.trim()
+    charges:Math.min(maxCharges, Math.max(0, num(dom.itemCharges.value))), maxCharges, notes:dom.itemNotes.value.trim(),
+    originalOwnerId:existing ? originalOwnerAfterTransfer(existing, destination.containerId) : ''
   });
 }
 function applyCategoryDefaults() {
@@ -1103,6 +1205,13 @@ function bindEvents() {
       if (!item.name) throw new Error('Informe o nome do item.');
       if (!item.containerId) throw new Error('Escolha onde o item será guardado.');
       await saveItem(item); dom.itemDialog.close();
+    } catch (error) { toast(error.message, 'error'); }
+  });
+  dom.transferForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await executeItemTransfer();
+      dom.transferDialog.close();
     } catch (error) { toast(error.message, 'error'); }
   });
 

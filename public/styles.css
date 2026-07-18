@@ -109,8 +109,13 @@ small, .field-help { color: var(--muted); font-weight: 500; line-height: 1.4; fo
 .item-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 15px 18px; border-bottom: 1px solid rgba(212,199,180,.7); }
 .item-list > .item-node:last-child > .item-row, .item-children > .item-node:last-child > .item-row { border-bottom: 0; }
 .item-row:hover { background: rgba(179,139,53,.06); }
+.item-row.no-load { background: rgba(76,118,88,.055); box-shadow: inset 4px 0 rgba(76,118,88,.48); }
+.item-row.no-load:hover { background: rgba(76,118,88,.10); }
 .item-row.selected { background: rgba(112,27,34,.07); }
+.item-row.no-load.selected { background: rgba(112,27,34,.11); box-shadow: inset 4px 0 var(--green); }
 .container-tag { color: var(--green); background: rgba(76,118,88,.10); }
+.no-load-tag { color: #365b42; background: rgba(76,118,88,.14); }
+.owner-tag { max-width: 100%; color: #74571c; background: rgba(179,139,53,.14); border: 1px solid rgba(179,139,53,.24); overflow-wrap: anywhere; }
 .item-select { display: flex; align-items: center; gap: 9px; margin: 0 0 4px; cursor: pointer; }
 .item-select input { width: auto; flex: 0 0 auto; }
 .item-name { font-weight: 900; }
@@ -188,6 +193,20 @@ dialog::backdrop { background: rgba(30,24,20,.58); backdrop-filter: blur(3px); }
 .dialog-heading h2 { font-family: Georgia, serif; font-size: 30px; margin: 0; color: var(--wine); }
 .dialog-close { border: 0; background: transparent; color: var(--wine); font-size: 30px; line-height: 1; }
 .dialog-copy { color: var(--muted); line-height: 1.55; }
+.transfer-destination-fieldset { margin: 0; padding: 14px; border: 1px solid var(--line); border-radius: 14px; }
+.transfer-destination-fieldset legend { padding: 0 7px; color: var(--wine); font-weight: 900; }
+.transfer-destinations { display: grid; gap: 8px; max-height: min(360px, 38vh); overflow-y: auto; padding: 2px; }
+.transfer-destination-option, .transfer-destination-option + .transfer-destination-option { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 11px; align-items: center; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fffdf8; cursor: pointer; transition: border-color .2s, background .2s, box-shadow .2s; }
+.transfer-destination-option:hover { background: rgba(179,139,53,.07); }
+.transfer-destination-option:has(input:checked) { border-color: var(--green); background: rgba(76,118,88,.09); box-shadow: 0 0 0 2px rgba(76,118,88,.10); }
+.transfer-destination-option:has(input:focus-visible) { outline: 3px solid rgba(146,42,49,.18); outline-offset: 1px; }
+.transfer-destination-option input { appearance: none; width: 20px; height: 20px; margin: 0; padding: 0; border: 2px solid var(--line); border-radius: 50%; background: white; box-shadow: none; }
+.transfer-destination-option input:checked { border: 6px solid var(--green); }
+.transfer-destination-option > span { display: grid; gap: 2px; min-width: 0; }
+.transfer-destination-option strong { color: var(--ink); overflow-wrap: anywhere; }
+.transfer-destination-option small { color: var(--muted); }
+.transfer-quantity-field { margin-top: 16px; }
+.transfer-quantity-field input { max-width: 220px; }
 .form-grid { display: grid; gap: 14px; }
 .two-columns { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .span-2 { grid-column: 1/-1; }
@@ -227,6 +246,7 @@ dialog::backdrop { background: rgba(30,24,20,.58); backdrop-filter: blur(3px); }
   .item-row { grid-template-columns: 1fr; }
   .item-children { margin-left: 12px; }
   .item-children .item-row { padding-left: 14px; }
+  .item-row.no-load, .item-row.no-load.selected { box-shadow: inset 3px 0 var(--green); }
   .item-actions { flex-direction: row; justify-content: space-between; align-items: center; }
   .group-grid { grid-template-columns: 1fr; }
   .section-nav { top: 4px; }
@@ -244,4 +264,10 @@ dialog::backdrop { background: rgba(30,24,20,.58); backdrop-filter: blur(3px); }
   .section-nav button { padding: 9px 11px; }
   .group-actions { width: 100%; }
   .group-actions .button { flex: 1; }
+  .transfer-destinations { max-height: 34vh; }
+  .transfer-destination-fieldset { padding: 10px; }
+  .transfer-destination-option, .transfer-destination-option + .transfer-destination-option { padding: 11px 10px; }
+  .transfer-quantity-field input { max-width: none; }
+  .transfer-dialog-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .transfer-dialog-actions .button { width: 100%; }
 }
