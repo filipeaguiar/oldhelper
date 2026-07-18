@@ -568,8 +568,9 @@ function itemHasNoLoad(item) {
   return item.category !== 'Moeda' && num(item.loadPerUnit) === 0;
 }
 function inventoryItemDisplayRank(item) {
+  if (num(item.maxCharges) > 0) return 0;
   if (item.isContainer) return 1;
-  return itemHasNoLoad(item) ? 2 : 0;
+  return itemHasNoLoad(item) ? 3 : 2;
 }
 function compareInventoryItems(a, b) {
   return inventoryItemDisplayRank(a) - inventoryItemDisplayRank(b) || a.name.localeCompare(b.name, 'pt-BR');
