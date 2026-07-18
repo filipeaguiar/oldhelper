@@ -528,6 +528,10 @@ function containerCapacity(container) {
 function itemHasNoLoad(item) {
   return item.category !== 'Moeda' && num(item.loadPerUnit) === 0;
 }
+function compareInventoryItems(a, b) {
+  const rank = (item) => itemHasNoLoad(item) ? (item.isContainer ? 1 : 2) : 0;
+  return rank(a) - rank(b) || a.name.localeCompare(b.name, 'pt-BR');
+}
 function originalOwnerAfterTransfer(item, targetContainerId) {
   const originHolder = state.containers.find((holder) => holder.id === item.containerId);
   const targetHolder = state.containers.find((holder) => holder.id === targetContainerId);
@@ -698,14 +702,14 @@ function renderContainer(holder, items) {
   if (holder.type === 'character') subtitleParts.push(`FOR ${num(holder.strength,10)} · CON ${num(holder.constitution,10)}`);
   if (totalItems.some((item) => item.isBackpack && num(item.qty) > 0)) subtitleParts.push('mochila +5');
   const visibleIds = new Set(items.map((item) => item.id));
-  const roots = items.filter((item) => !item.parentItemId || !visibleIds.has(item.parentItemId)).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const roots = items.filter((item) => !item.parentItemId || !visibleIds.has(item.parentItemId)).sort(compareInventoryItems);
   const rows = roots.length
     ? `<ul class="item-list">${roots.map((item) => renderItemNode(item, visibleIds)).join('')}</ul>`
     : '<div class="empty-container">Nenhum item neste portador com os filtros atuais.</div>';
   return `<article class="card container-card"><header class="container-header"><div class="container-title-row"><div><h2>${esc(holder.name)}</h2><div class="container-subtitle">${esc(subtitleParts.join(' · '))} · ${plural(totalItems.length, 'tipo de item')}</div></div><div class="load-number">${formatNumber(load)} / ${formatNumber(capacity)}</div></div><div class="load-track" title="Carga"><div class="load-fill ${loadClass}" style="width:${percent}%"></div></div></header>${rows}</article>`;
 }
 function renderItemNode(item, visibleIds) {
-  const children = itemChildren(item.id).filter((child) => visibleIds.has(child.id)).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const children = itemChildren(item.id).filter((child) => visibleIds.has(child.id)).sort(compareInventoryItems);
   return `<li class="item-node">${renderItem(item)}${children.length ? `<ul class="item-children">${children.map((child) => renderItemNode(child, visibleIds)).join('')}</ul>` : ''}</li>`;
 }
 function renderItem(item) {
