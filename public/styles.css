@@ -86,9 +86,10 @@ small, .field-help { color: var(--muted); font-weight: 500; line-height: 1.4; fo
 .alert-item.danger { background: rgba(165,51,51,.08); color: var(--danger); }
 .alert-item.ok { background: rgba(76,118,88,.08); color: var(--green); }
 
-.toolbar { display: grid; grid-template-columns: 1.8fr 1fr 1fr auto; gap: 12px; align-items: end; padding: 16px; margin-bottom: 18px; }
+.toolbar { display: grid; grid-template-columns: 1.8fr 1fr 1fr auto auto; gap: 12px; align-items: end; padding: 16px; margin-bottom: 18px; }
 .toolbar label { margin: 0; }
-.add-button { min-height: 43px; white-space: nowrap; }
+.add-button, .bulk-transfer-button { min-height: 43px; white-space: nowrap; }
+.bulk-transfer-button:disabled { opacity: .55; cursor: not-allowed; }
 .inventory-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
 .container-card { overflow: hidden; }
 .container-header { padding: 18px 18px 14px; border-bottom: 1px solid var(--line); background: linear-gradient(135deg, rgba(112,27,34,.06), rgba(179,139,53,.08)); }
@@ -108,8 +109,11 @@ small, .field-help { color: var(--muted); font-weight: 500; line-height: 1.4; fo
 .item-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 15px 18px; border-bottom: 1px solid rgba(212,199,180,.7); }
 .item-list > .item-node:last-child > .item-row, .item-children > .item-node:last-child > .item-row { border-bottom: 0; }
 .item-row:hover { background: rgba(179,139,53,.06); }
+.item-row.selected { background: rgba(112,27,34,.07); }
 .container-tag { color: var(--green); background: rgba(76,118,88,.10); }
-.item-name { font-weight: 900; margin-bottom: 4px; }
+.item-select { display: flex; align-items: center; gap: 9px; margin: 0 0 4px; cursor: pointer; }
+.item-select input { width: auto; flex: 0 0 auto; }
+.item-name { font-weight: 900; }
 .item-description { margin: 6px 0 9px; color: var(--ink); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .item-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
 .tag { display: inline-flex; border-radius: 999px; padding: 3px 8px; background: var(--paper-2); color: var(--wine); font-weight: 850; }

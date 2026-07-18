@@ -124,6 +124,7 @@
           <span>Portador</span>
           <select id="containerFilter"><option value="">Todos</option></select>
         </label>
+        <button id="bulkTransferBtn" class="button secondary bulk-transfer-button" type="button" disabled>⇄ Transferir selecionados para animal</button>
         <button id="addItemBtn" class="button primary add-button" type="button">＋ Adicionar item</button>
       </section>
       <section id="inventory" class="inventory-grid" aria-live="polite"></section>
@@ -241,7 +242,7 @@
         </label>
         <label class="checkbox-label">
           <input id="itemBackpack" type="checkbox" />
-          <span>É uma mochila equipada (+5 na carga máxima)</span>
+          <span>Mochila equipada (máximo 1 por personagem, +5 na carga máxima)</span>
         </label>
         <label class="checkbox-label">
           <input id="itemIsContainer" type="checkbox" />

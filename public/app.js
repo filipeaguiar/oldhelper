@@ -9,7 +9,7 @@ const dom = {
   copyCodeBtn: $('copyCodeBtn'), leaveBtn: $('leaveBtn'), settingsBtn: $('settingsBtn'),
   summary: $('summary'), walletSummary: $('walletSummary'), alertsSummary: $('alertsSummary'),
   searchInput: $('searchInput'), categoryFilter: $('categoryFilter'), containerFilter: $('containerFilter'),
-  addItemBtn: $('addItemBtn'), inventory: $('inventory'),
+  bulkTransferBtn: $('bulkTransferBtn'), addItemBtn: $('addItemBtn'), inventory: $('inventory'),
   rationForm: $('rationForm'), rationDays: $('rationDays'), rationMargin: $('rationMargin'), rationPrice: $('rationPrice'),
   rationCurrency: $('rationCurrency'), rationParticipants: $('rationParticipants'), rationPayer: $('rationPayer'),
   rationDestination: $('rationDestination'), rationResult: $('rationResult'), buyRationsBtn: $('buyRationsBtn'),
@@ -33,7 +33,7 @@ const dom = {
 
 const state = {
   mode: 'local', cloud: null, user: null, identity: null, campaignId: null,
-  campaign: null, containers: [], items: [], history: [], unsubs: [], activeView: 'resumo',
+  campaign: null, containers: [], items: [], history: [], unsubs: [], activeView: 'resumo', selectedItemIds: new Set(),
   channel: 'BroadcastChannel' in window ? new BroadcastChannel('old-helper-inventory-v3') : null
 };
 
@@ -340,7 +340,7 @@ function attachCloudListeners() {
 }
 function leaveCampaign() {
   clearListeners();
-  state.campaignId = null; state.campaign = null; state.containers = []; state.items = []; state.history = [];
+  state.campaignId = null; state.campaign = null; state.containers = []; state.items = []; state.history = []; state.selectedItemIds.clear();
   sessionStorage.removeItem('oldHelperCampaignId');
   updateCampaignURL('');
   dom.app.classList.add('hidden'); dom.landing.classList.remove('hidden');
@@ -359,10 +359,21 @@ async function addHistory(text) {
   }
 }
 
+function validateBackpack(item, containerId = item.containerId, parentItemId = item.parentItemId) {
+  if (!item.isBackpack) return;
+  const holder = state.containers.find((candidate) => candidate.id === containerId);
+  if (holder?.type !== 'character') throw new Error('A mochila equipada deve ficar diretamente com um personagem.');
+  if (parentItemId) throw new Error('A mochila equipada não pode ficar dentro de outro item.');
+  if (![0, 1].includes(num(item.qty))) throw new Error('Cada personagem pode carregar no máximo uma mochila equipada.');
+  const conflict = state.items.some((candidate) => candidate.id !== item.id && candidate.containerId === containerId && candidate.isBackpack && num(candidate.qty) > 0);
+  if (num(item.qty) > 0 && conflict) throw new Error(`${holder.name} já possui uma mochila equipada.`);
+}
+
 async function saveItem(item) {
   const existing = state.items.find((candidate) => candidate.id === item.id);
   const descendants = existing ? itemDescendants(existing.id) : [];
   if (existing?.isContainer && !item.isContainer && descendants.length) throw new Error('Transfira ou remova o conteúdo antes de desativar este contêiner.');
+  validateBackpack(item);
   item.updatedAt = nowISO(); item.updatedBy = state.identity.name;
   const holderChanged = Boolean(existing && existing.containerId !== item.containerId);
   if (state.mode === 'cloud') {
@@ -384,6 +395,7 @@ async function saveItem(item) {
 }
 async function patchItem(id, patch, historyText) {
   const item = state.items.find((candidate) => candidate.id === id); if (!item) return;
+  validateBackpack({ ...item, ...patch });
   if (state.mode === 'cloud') {
     const { db, doc, updateDoc, serverTimestamp } = state.cloud;
     await updateDoc(doc(db, 'campaigns', state.campaignId, 'items', id), { ...patch, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
@@ -450,16 +462,16 @@ async function removeHolder(holderId, targetId = '') {
 
 function containerCapacity(container) {
   if (!container) return 0;
-  if (container.type === 'animal' || container.type === 'stash') return Math.max(0, num(container.capacity));
+  if (container.type !== 'character') return Math.max(0, num(container.capacity));
   const base = Math.max(num(container.strength, 10), num(container.constitution, 10));
-  const hasBackpack = state.items.some((item) => item.containerId === container.id && item.isBackpack && num(item.qty) > 0);
+  const hasBackpack = state.items.some((item) => item.containerId === container.id && !item.parentItemId && item.isBackpack && num(item.qty) > 0);
   return base + (hasBackpack ? 5 : 0);
 }
 function containerLoad(containerId) {
   const items = state.items.filter((item) => item.containerId === containerId);
   const coins = items.filter((item) => item.category === 'Moeda').reduce((sum, item) => sum + num(item.qty), 0);
   const other = items.filter((item) => item.category !== 'Moeda').reduce((sum, item) => sum + num(item.qty) * num(item.loadPerUnit), 0);
-  return Math.floor(coins / 100) + other;
+  return Math.floor(coins / 100 + other);
 }
 function holderWallet(containerId) {
   const wallet = { PO:0, PP:0, PC:0 };
@@ -587,7 +599,17 @@ function filteredItems() {
   for (const item of matched) for (const ancestor of itemAncestors(item.id)) visibleIds.add(ancestor.id);
   return state.items.filter((item) => visibleIds.has(item.id) && (!containerId || item.containerId === containerId));
 }
+function updateBulkTransferButton() {
+  const count = state.selectedItemIds.size;
+  dom.bulkTransferBtn.disabled = count === 0;
+  dom.bulkTransferBtn.textContent = count
+    ? `⇄ Transferir ${plural(count, 'selecionado', 'selecionados')} para animal`
+    : '⇄ Transferir selecionados para animal';
+}
 function renderInventory() {
+  const existingIds = new Set(state.items.map((item) => item.id));
+  for (const id of state.selectedItemIds) if (!existingIds.has(id)) state.selectedItemIds.delete(id);
+  updateBulkTransferButton();
   const visible = filteredItems();
   const selected = dom.containerFilter.value;
   const holders = state.containers.filter((holder) => !selected || holder.id === selected);
@@ -622,9 +644,16 @@ function renderItem(item) {
   const icon = categoryIcons[item.category] || '•';
   const charges = num(item.maxCharges) > 0 ? `<span class="tag">✦ ${formatNumber(item.charges,0)}/${formatNumber(item.maxCharges,0)} cargas</span>` : '';
   const load = item.category === 'Moeda' ? '1 carga/100 moedas' : `${formatNumber(item.loadPerUnit)} carga/un.`;
-  return `<div class="item-row" data-id="${esc(item.id)}"><div><div class="item-name">${icon} ${esc(item.name)}</div>${item.description ? `<p class="item-description">${esc(item.description)}</p>` : ''}<div class="item-meta"><span class="tag">${esc(item.category)}</span><span>${formatNumber(item.qty)} ${esc(item.unit || 'un.')}</span>${charges}<span>${esc(load)}</span>${item.isBackpack ? '<span class="tag">mochila equipada</span>' : ''}${item.isContainer ? '<span class="tag container-tag">▣ contêiner</span>' : ''}</div>${item.notes ? `<p class="item-notes"><strong>Observações:</strong> ${esc(item.notes)}</p>` : ''}</div><div class="item-actions"><div class="counter" aria-label="Quantidade"><button data-action="qty-minus" title="Diminuir">−</button><span>${formatNumber(item.qty)}</span><button data-action="qty-plus" title="Aumentar">＋</button></div>${num(item.maxCharges) > 0 ? `<div class="counter" aria-label="Cargas"><button data-action="charge-minus" title="Usar carga">−</button><span>✦ ${formatNumber(item.charges,0)}</span><button data-action="charge-plus" title="Repor carga">＋</button></div>` : ''}<div class="mini-actions"><button class="mini-button" data-action="transfer" title="Transferir">⇄</button><button class="mini-button" data-action="edit" title="Editar">✎</button><button class="mini-button" data-action="delete" title="Excluir">×</button></div></div></div>`;
+  const selected = state.selectedItemIds.has(item.id);
+  return `<div class="item-row ${selected ? 'selected' : ''}" data-id="${esc(item.id)}"><div><label class="item-select"><input type="checkbox" data-select-item value="${esc(item.id)}" ${selected ? 'checked' : ''}><span class="item-name">${icon} ${esc(item.name)}</span></label>${item.description ? `<p class="item-description">${esc(item.description)}</p>` : ''}<div class="item-meta"><span class="tag">${esc(item.category)}</span><span>${formatNumber(item.qty)} ${esc(item.unit || 'un.')}</span>${charges}<span>${esc(load)}</span>${item.isBackpack ? '<span class="tag">mochila equipada</span>' : ''}${item.isContainer ? '<span class="tag container-tag">▣ contêiner</span>' : ''}</div>${item.notes ? `<p class="item-notes"><strong>Observações:</strong> ${esc(item.notes)}</p>` : ''}</div><div class="item-actions"><div class="counter" aria-label="Quantidade"><button data-action="qty-minus" title="Diminuir">−</button><span>${formatNumber(item.qty)}</span><button data-action="qty-plus" title="Aumentar" ${item.isBackpack && num(item.qty) >= 1 ? 'disabled' : ''}>＋</button></div>${num(item.maxCharges) > 0 ? `<div class="counter" aria-label="Cargas"><button data-action="charge-minus" title="Usar carga">−</button><span>✦ ${formatNumber(item.charges,0)}</span><button data-action="charge-plus" title="Repor carga">＋</button></div>` : ''}<div class="mini-actions"><button class="mini-button" data-action="transfer" title="Transferir">⇄</button><button class="mini-button" data-action="edit" title="Editar">✎</button><button class="mini-button" data-action="delete" title="Excluir">×</button></div></div></div>`;
 }
 function bindInventoryActions() {
+  dom.inventory.querySelectorAll('[data-select-item]').forEach((checkbox) => checkbox.addEventListener('change', (event) => {
+    const id = event.currentTarget.value;
+    if (event.currentTarget.checked) state.selectedItemIds.add(id); else state.selectedItemIds.delete(id);
+    event.currentTarget.closest('.item-row')?.classList.toggle('selected', event.currentTarget.checked);
+    updateBulkTransferButton();
+  }));
   dom.inventory.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', async (event) => {
     const row = event.currentTarget.closest('.item-row'); const item = state.items.find((candidate) => candidate.id === row?.dataset.id); if (!item) return;
     const action = event.currentTarget.dataset.action;
@@ -645,6 +674,7 @@ async function transferItem(item) {
   if (!choices.length) return toast('Não há outro destino válido para este item.', 'error');
   const answer = prompt(`Transferir “${item.name}” para:\n${choices.map((choice,index) => `${index + 1}. ${choice.label}`).join('\n')}\n\nDigite o número:`);
   const target = choices[Number(answer) - 1]; if (!target) return;
+  validateBackpack(item, target.containerId, target.parentItemId);
   const originItem = state.items.find((candidate) => candidate.id === item.parentItemId);
   const originHolder = state.containers.find((holder) => holder.id === item.containerId);
   const originLabel = originItem?.name || originHolder?.name || 'outro destino';
@@ -661,6 +691,49 @@ async function transferItem(item) {
     writeLocal(); renderAll();
   }
   await addHistory(`${state.identity.name} transferiu “${item.name}”${descendants.length ? ` com ${plural(descendants.length, 'item contido', 'itens contidos')}` : ''} de ${originLabel} para ${target.label.trim()}.`);
+}
+async function bulkTransferToAnimal() {
+  const selectedItems = state.items.filter((item) => state.selectedItemIds.has(item.id));
+  if (!selectedItems.length) throw new Error('Selecione pelo menos um item.');
+  const animals = state.containers.filter((holder) => holder.type === 'animal');
+  if (!animals.length) throw new Error('Adicione um animal de carga antes de transferir itens.');
+  let target = animals[0];
+  if (animals.length > 1) {
+    const answer = prompt(`Transferir os itens selecionados para qual animal?\n${animals.map((animal, index) => `${index + 1}. ${animal.name}`).join('\n')}\n\nDigite o número:`);
+    target = animals[Number(answer) - 1];
+    if (!target) return;
+  }
+  const selectedIds = new Set(selectedItems.map((item) => item.id));
+  const roots = selectedItems.filter((item) => !itemAncestors(item.id).some((ancestor) => selectedIds.has(ancestor.id)));
+  for (const item of roots) validateBackpack(item, target.id, '');
+  const changes = new Map();
+  for (const root of roots) {
+    if (root.containerId === target.id && !root.parentItemId) continue;
+    changes.set(root.id, { item:root, root:true });
+    for (const child of itemDescendants(root.id)) changes.set(child.id, { item:child, root:false });
+  }
+  if (!changes.size) throw new Error(`Os itens selecionados já estão diretamente com ${target.name}.`);
+  if (changes.size > 450) throw new Error('Selecione menos itens por transferência.');
+  if (state.mode === 'cloud') {
+    const { db, doc, writeBatch, serverTimestamp } = state.cloud;
+    const batch = writeBatch(db);
+    for (const { item, root } of changes.values()) {
+      const patch = { containerId:target.id, updatedAt:serverTimestamp(), updatedBy:state.identity.name };
+      if (root) patch.parentItemId = '';
+      batch.update(doc(db, 'campaigns', state.campaignId, 'items', item.id), patch);
+    }
+    await batch.commit();
+  } else {
+    for (const { item, root } of changes.values()) Object.assign(item, {
+      containerId:target.id, ...(root ? { parentItemId:'' } : {}), updatedAt:nowISO(), updatedBy:state.identity.name
+    });
+    writeLocal();
+  }
+  const count = roots.length;
+  state.selectedItemIds.clear();
+  renderAll();
+  await addHistory(`${state.identity.name} transferiu ${plural(count, 'item selecionado', 'itens selecionados')} para ${target.name}.`);
+  toast(`${plural(count, 'item transferido', 'itens transferidos')} para ${target.name}.`);
 }
 
 function renderRationParticipants() {
@@ -821,6 +894,7 @@ function openItemDialog(item = null) {
   dom.itemDescription.value = item?.description || '';
   dom.itemCategory.value = item?.category || 'Equipamento';
   dom.itemQty.value = item?.qty ?? 1;
+  dom.itemQty.max = item?.isBackpack ? '1' : '';
   dom.itemUnit.value = item?.unit || 'un.';
   dom.itemLoad.value = item?.loadPerUnit ?? 0;
   dom.itemBackpack.checked = Boolean(item?.isBackpack);
@@ -1011,12 +1085,17 @@ function bindEvents() {
   document.querySelectorAll('[data-go-view]').forEach((button) => button.addEventListener('click', () => switchView(button.dataset.goView)));
   window.addEventListener('hashchange', () => switchView(location.hash.slice(1), false));
 
+  dom.bulkTransferBtn.addEventListener('click', () => bulkTransferToAnimal().catch((error) => toast(error.message, 'error')));
   dom.addItemBtn.addEventListener('click', () => {
     if (!state.containers.length) return toast('Adicione um portador antes de cadastrar itens.', 'error');
     openItemDialog();
   });
   [dom.searchInput, dom.categoryFilter, dom.containerFilter].forEach((element) => element.addEventListener(element.tagName === 'INPUT' ? 'input' : 'change', renderInventory));
   dom.itemCategory.addEventListener('change', applyCategoryDefaults);
+  dom.itemBackpack.addEventListener('change', () => {
+    dom.itemQty.max = dom.itemBackpack.checked ? '1' : '';
+    if (dom.itemBackpack.checked && num(dom.itemQty.value) > 1) dom.itemQty.value = 1;
+  });
   dom.itemForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     try {

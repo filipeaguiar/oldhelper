@@ -8,10 +8,12 @@ Aplicativo web simples para inventário compartilhado em sessões de Old Dragon 
 - Quantidade dinâmica de personagens, animais de carga e depósitos.
 - Adição, edição e remoção segura de portadores.
 - Transferência automática de todos os itens antes de remover um portador ocupado.
+- Seleção múltipla de itens para transferência em massa a um animal de carga.
 - Itens com nome, descrição editável, observações, quantidade, carga e portador.
 - Itens podem funcionar como contêineres de outros itens, com organização em vários níveis.
 - Controle de flechas, virotes, rações, moedas e cargas de itens mágicos.
 - Ouro/PO, PP e PC armazenados com qualquer personagem ou animal.
+- Uma mochila equipada por personagem, aumentando sua capacidade de carga em 5.
 - Calculadora de rações por participante, dias e margem de segurança.
 - Compra direta de rações: debita as moedas do portador escolhido e adiciona o estoque ao destino.
 - Transação atômica no Firestore para evitar compras parcialmente registradas.
