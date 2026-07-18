@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // MVP para grupo privado: qualquer usuário autenticado que conheça o código
+    // da campanha pode ler e alterar seus dados. Para disponibilização pública,
+    // adicione membros por campanha e permissões específicas para o Mestre.
+    match /campaigns/{campaignId} {
+      allow read, create, update: if request.auth != null;
+      allow delete: if false;
+
+      match /{document=**} {
+        allow read, write: if request.auth != null;
+      }
+    }
+  }
+}
