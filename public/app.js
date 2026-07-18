@@ -44,6 +44,7 @@ const state = {
 };
 
 const INSTALL_DISMISSED_KEY = 'oldHelperInstallDismissed';
+const LAST_CAMPAIGN_KEY = 'oldHelperCampaignId';
 let deferredInstallPrompt = null;
 
 function isInstalledMode() {
@@ -113,6 +114,20 @@ function campaignCodeFromURL() {
   const raw = new URL(location.href).searchParams.get('campaign');
   if (raw === null) return { present:false, code:'' };
   return { present:true, code:normalizeCode(raw), valid:Boolean(normalizeCode(raw)) };
+}
+function rememberCampaign(code) {
+  localStorage.setItem(LAST_CAMPAIGN_KEY, normalizeCode(code));
+  sessionStorage.removeItem(LAST_CAMPAIGN_KEY);
+}
+function rememberedCampaign() {
+  const code = normalizeCode(localStorage.getItem(LAST_CAMPAIGN_KEY) || sessionStorage.getItem(LAST_CAMPAIGN_KEY));
+  if (code) localStorage.setItem(LAST_CAMPAIGN_KEY, code);
+  sessionStorage.removeItem(LAST_CAMPAIGN_KEY);
+  return code;
+}
+function forgetCampaign() {
+  localStorage.removeItem(LAST_CAMPAIGN_KEY);
+  sessionStorage.removeItem(LAST_CAMPAIGN_KEY);
 }
 function updateCampaignURL(code = state.campaignId) {
   const url = new URL(location.href);
@@ -374,7 +389,7 @@ async function enterCampaign(code) {
   if (!await campaignExists(normalized)) throw new Error('Campanha não encontrada. Confira o código.');
   clearListeners();
   state.campaignId = normalized;
-  sessionStorage.setItem('oldHelperCampaignId', normalized);
+  rememberCampaign(normalized);
   updateCampaignURL(normalized);
   dom.landing.classList.add('hidden');
   dom.app.classList.remove('hidden');
@@ -411,7 +426,7 @@ function attachCloudListeners() {
 function leaveCampaign() {
   clearListeners();
   state.campaignId = null; state.campaign = null; state.containers = []; state.items = []; state.history = []; state.selectedItemIds.clear();
-  sessionStorage.removeItem('oldHelperCampaignId');
+  forgetCampaign();
   updateCampaignURL('');
   dom.app.classList.add('hidden'); dom.landing.classList.remove('hidden');
 }
@@ -1357,7 +1372,7 @@ async function boot() {
   await initCloud();
   state.identity = savedIdentity || { name:'Jogador', role:'player' };
   const requested = campaignCodeFromURL();
-  const resume = sessionStorage.getItem('oldHelperCampaignId');
+  const resume = rememberedCampaign();
   if (requested.present) {
     dom.joinCode.value = requested.code;
     useLocalIdentity();
@@ -1365,7 +1380,11 @@ async function boot() {
     else try { await enterCampaign(requested.code); } catch (error) { toast(error.message, 'error'); }
   } else if (resume) {
     useLocalIdentity();
-    try { await enterCampaign(resume); } catch { sessionStorage.removeItem('oldHelperCampaignId'); }
+    try { await enterCampaign(resume); }
+    catch (error) {
+      if (error.message.startsWith('Campanha não encontrada')) forgetCampaign();
+      else toast(error.message, 'error');
+    }
   }
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('./service-worker.js', { updateViaCache:'none' })

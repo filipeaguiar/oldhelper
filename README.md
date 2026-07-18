@@ -59,7 +59,7 @@ Nesse modo, os dados ficam no `localStorage` do navegador e são compartilhados 
 
 ## Acessar e compartilhar campanhas
 
-Ao criar uma campanha, o app gera um código alfanumérico e atualiza a URL com `?campaign=CODIGO`. Outros participantes podem digitar esse código na tela inicial ou abrir o link copiado ao clicar no código da campanha.
+Ao criar uma campanha, o app gera um código alfanumérico e atualiza a URL com `?campaign=CODIGO`. Outros participantes podem digitar esse código na tela inicial ou abrir o link copiado ao clicar no código da campanha. A última campanha acessada fica salva no `localStorage` e é reaberta automaticamente nas próximas visitas; a ação **Sair** remove essa preferência.
 
 Não há cadastro de conta, e-mail ou senha. O apelido e o perfil da tela inicial são apenas uma identificação local para o histórico; se o apelido estiver vazio, o app usa `Jogador` e não bloqueia a abertura de links.
 
