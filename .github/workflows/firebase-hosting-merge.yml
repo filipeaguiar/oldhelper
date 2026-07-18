@@ -6,11 +6,16 @@ on:
   push:
     branches:
       - main
+concurrency:
+  group: firebase-hosting-live
+  cancel-in-progress: true
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Invalidar cache do aplicativo
+        run: sed -i "s/__BUILD_VERSION__/${GITHUB_SHA}/g" public/service-worker.js
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,6 @@
-const CACHE = 'old-helper-v8';
+// Substituído pelo SHA do commit no workflow de deploy para invalidar o cache a cada push.
+const BUILD_VERSION = '__BUILD_VERSION__';
+const CACHE = `old-helper-${BUILD_VERSION}`;
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './firebase-config.js',
   './manifest.webmanifest', './icon.svg', './icons/icon-192.png', './icons/icon-512.png',

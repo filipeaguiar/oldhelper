@@ -1407,6 +1407,12 @@ async function boot() {
     }
   }
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    let reloadingForUpdate = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      location.reload();
+    });
     navigator.serviceWorker.register('./service-worker.js', { updateViaCache:'none' })
       .then((registration) => registration.update())
       .catch(console.warn);
