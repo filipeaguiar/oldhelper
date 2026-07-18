@@ -1355,7 +1355,11 @@ async function boot() {
     useLocalIdentity();
     try { await enterCampaign(resume); } catch { sessionStorage.removeItem('oldHelperCampaignId'); }
   }
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./service-worker.js').catch(console.warn);
+  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+    navigator.serviceWorker.register('./service-worker.js', { updateViaCache:'none' })
+      .then((registration) => registration.update())
+      .catch(console.warn);
+  }
 }
 
 boot();
