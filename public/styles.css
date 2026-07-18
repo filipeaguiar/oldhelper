@@ -100,10 +100,15 @@ small, .field-help { color: var(--muted); font-weight: 500; line-height: 1.4; fo
 .load-fill { height: 100%; background: var(--green); border-radius: inherit; transition: width .25s; }
 .load-fill.warning { background: #b67920; }
 .load-fill.over { background: var(--danger); }
-.item-list { list-style: none; margin: 0; padding: 0; }
+.item-list, .item-children { list-style: none; margin: 0; padding: 0; }
+.item-node { position: relative; }
+.item-children { margin-left: 22px; border-left: 2px solid rgba(179,139,53,.28); }
+.item-children > .item-node::before { content: ''; position: absolute; left: 0; top: 27px; width: 12px; border-top: 2px solid rgba(179,139,53,.28); }
+.item-children .item-row { padding-left: 18px; background: rgba(179,139,53,.025); }
 .item-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 15px 18px; border-bottom: 1px solid rgba(212,199,180,.7); }
-.item-row:last-child { border-bottom: 0; }
-.item-row:hover { background: rgba(179,139,53,.045); }
+.item-list > .item-node:last-child > .item-row, .item-children > .item-node:last-child > .item-row { border-bottom: 0; }
+.item-row:hover { background: rgba(179,139,53,.06); }
+.container-tag { color: var(--green); background: rgba(76,118,88,.10); }
 .item-name { font-weight: 900; margin-bottom: 4px; }
 .item-description { margin: 6px 0 9px; color: var(--ink); font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .item-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
@@ -216,6 +221,8 @@ dialog::backdrop { background: rgba(30,24,20,.58); backdrop-filter: blur(3px); }
   .topbar { align-items: center; }
   .top-actions .button { padding-inline: 12px; }
   .item-row { grid-template-columns: 1fr; }
+  .item-children { margin-left: 12px; }
+  .item-children .item-row { padding-left: 14px; }
   .item-actions { flex-direction: row; justify-content: space-between; align-items: center; }
   .group-grid { grid-template-columns: 1fr; }
   .section-nav { top: 4px; }

@@ -1,4 +1,4 @@
-const CACHE = 'old-helper-v3';
+const CACHE = 'old-helper-v5';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './firebase-config.js',
   './manifest.webmanifest', './icon.svg'

@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 const dom = {
   landing: $('landing'), app: $('app'), toast: $('toast'), connectionBadge: $('connectionBadge'),
   displayName: $('displayName'), userRole: $('userRole'), createForm: $('createForm'), joinForm: $('joinForm'),
-  campaignName: $('campaignName'), animalName: $('animalName'), joinCode: $('joinCode'),
+  campaignName: $('campaignName'), joinCode: $('joinCode'),
   campaignTitle: $('campaignTitle'), campaignCode: $('campaignCode'), syncStatus: $('syncStatus'),
   copyCodeBtn: $('copyCodeBtn'), leaveBtn: $('leaveBtn'), settingsBtn: $('settingsBtn'),
   summary: $('summary'), walletSummary: $('walletSummary'), alertsSummary: $('alertsSummary'),
@@ -18,7 +18,7 @@ const dom = {
   itemDialog: $('itemDialog'), itemForm: $('itemForm'), itemDialogTitle: $('itemDialogTitle'), itemId: $('itemId'),
   itemName: $('itemName'), itemDescription: $('itemDescription'), itemCategory: $('itemCategory'), itemContainer: $('itemContainer'),
   itemQty: $('itemQty'), itemUnit: $('itemUnit'), itemLoad: $('itemLoad'), itemBackpack: $('itemBackpack'),
-  itemCharges: $('itemCharges'), itemMaxCharges: $('itemMaxCharges'), itemNotes: $('itemNotes'),
+  itemIsContainer: $('itemIsContainer'), itemCharges: $('itemCharges'), itemMaxCharges: $('itemMaxCharges'), itemNotes: $('itemNotes'),
   holderDialog: $('holderDialog'), holderForm: $('holderForm'), holderDialogTitle: $('holderDialogTitle'), holderId: $('holderId'),
   holderName: $('holderName'), holderType: $('holderType'), holderSubtype: $('holderSubtype'), holderPlayer: $('holderPlayer'),
   holderStrength: $('holderStrength'), holderConstitution: $('holderConstitution'), holderCapacity: $('holderCapacity'),
@@ -47,11 +47,28 @@ function uid(prefix = 'id') {
   const random = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
   return `${prefix}_${random}`;
 }
-function normalizeCode(value) { return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); }
+function normalizeCode(value) { return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8); }
 function makeCode() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   const bytes = crypto.getRandomValues(new Uint8Array(6));
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('');
+}
+function campaignCodeFromURL() {
+  const raw = new URL(location.href).searchParams.get('campaign');
+  if (raw === null) return { present:false, code:'' };
+  return { present:true, code:normalizeCode(raw), valid:Boolean(normalizeCode(raw)) };
+}
+function updateCampaignURL(code = state.campaignId) {
+  const url = new URL(location.href);
+  if (code) url.searchParams.set('campaign', normalizeCode(code));
+  else url.searchParams.delete('campaign');
+  history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+function campaignShareURL() {
+  const url = new URL(location.pathname, location.origin);
+  url.searchParams.set('campaign', state.campaignId);
+  url.hash = state.activeView && state.activeView !== 'resumo' ? state.activeView : '';
+  return url.href;
 }
 function esc(value = '') {
   return String(value).replace(/[&<>'"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[c]));
@@ -83,12 +100,12 @@ function holderKind(holder) {
   if (holder.type === 'animal') return holder.subtype || 'Animal de carga';
   return holder.subtype || 'Depósito compartilhado';
 }
-function identityValid() {
-  const name = dom.displayName.value.trim();
-  if (!name) { toast('Informe seu nome.', 'error'); dom.displayName.focus(); return false; }
-  state.identity = { name, role: dom.userRole.value };
+function useLocalIdentity() {
+  const name = dom.displayName.value.trim() || state.identity?.name || 'Jogador';
+  state.identity = { name, role:dom.userRole.value || state.identity?.role || 'player' };
+  dom.displayName.value = name;
   localStorage.setItem('oldHelperIdentity', JSON.stringify(state.identity));
-  return true;
+  return state.identity;
 }
 function setSync(text, kind = '') {
   dom.syncStatus.textContent = text;
@@ -148,20 +165,11 @@ function makeHolder(data) {
     order: num(data.order, 1),
     strength: type === 'character' ? num(data.strength, 10) : null,
     constitution: type === 'character' ? num(data.constitution, 10) : null,
-    capacity: type === 'character' ? null : num(data.capacity, type === 'animal' ? 20 : 0),
+    capacity: type === 'character' ? null : Math.max(0, num(data.capacity, type === 'animal' ? 20 : 0)),
     active: data.active !== false,
     consumesRations: data.consumesRations !== false,
     dailyRations: Math.max(0, num(data.dailyRations, type === 'stash' ? 0 : 1))
   };
-}
-function defaultContainers(animalName) {
-  return [
-    makeHolder({ name:'Jogador 1', type:'character', order:1 }),
-    makeHolder({ name:'Jogador 2', type:'character', order:2 }),
-    makeHolder({ name:'Jogador 3', type:'character', order:3 }),
-    makeHolder({ name:'Jogador 4', type:'character', order:4 }),
-    makeHolder({ name:animalName || 'Mula do Grupo', type:'animal', subtype:'Mula', order:5, capacity:20 })
-  ];
 }
 function normalizeHolder(raw, index = 0) {
   return makeHolder({ ...raw, id: raw.id, order: raw.order ?? index + 1 });
@@ -169,11 +177,70 @@ function normalizeHolder(raw, index = 0) {
 function normalizeItem(raw) {
   return {
     id: raw.id || uid('item'), name: raw.name || 'Item', description: raw.description || '', category: raw.category || 'Outro',
-    containerId: raw.containerId || '', qty: Math.max(0, num(raw.qty, 0)), unit: raw.unit || 'un.',
+    containerId: raw.containerId || '', parentItemId: raw.parentItemId || '', isContainer: Boolean(raw.isContainer),
+    qty: Math.max(0, num(raw.qty, 0)), unit: raw.unit || 'un.',
     loadPerUnit: Math.max(0, num(raw.loadPerUnit, 0)), isBackpack: Boolean(raw.isBackpack),
     charges: Math.max(0, num(raw.charges, 0)), maxCharges: Math.max(0, num(raw.maxCharges, 0)), notes: raw.notes || '',
     updatedAt: raw.updatedAt || nowISO(), updatedBy: raw.updatedBy || ''
   };
+}
+
+function indexItems(items = state.items) { return new Map(items.map((item) => [item.id, item])); }
+function itemChildren(itemId, items = state.items) { return items.filter((item) => item.parentItemId === itemId); }
+function itemAncestors(itemId, items = state.items) {
+  const byId = indexItems(items); const ancestors = []; const visited = new Set([itemId]);
+  let current = byId.get(itemId);
+  while (current?.parentItemId) {
+    const parent = byId.get(current.parentItemId);
+    if (!parent || visited.has(parent.id)) break;
+    ancestors.push(parent); visited.add(parent.id); current = parent;
+  }
+  return ancestors;
+}
+function itemDescendants(itemId, items = state.items) {
+  const childrenByParent = new Map();
+  for (const item of items) {
+    if (!item.parentItemId) continue;
+    if (!childrenByParent.has(item.parentItemId)) childrenByParent.set(item.parentItemId, []);
+    childrenByParent.get(item.parentItemId).push(item);
+  }
+  const descendants = []; const visited = new Set([itemId]); const queue = [...(childrenByParent.get(itemId) || [])];
+  while (queue.length) {
+    const child = queue.shift();
+    if (visited.has(child.id)) continue;
+    visited.add(child.id); descendants.push(child); queue.push(...(childrenByParent.get(child.id) || []));
+  }
+  return descendants;
+}
+function itemDepth(itemId, items = state.items) { return itemAncestors(itemId, items).length; }
+function itemHolder(item, items = state.items) {
+  const root = itemAncestors(item.id, items).at(-1) || item;
+  return state.containers.find((holder) => holder.id === root.containerId) || state.containers.find((holder) => holder.id === item.containerId) || null;
+}
+function repairItemTree(items = state.items, containers = state.containers) {
+  if (!containers.length) return items;
+  const byId = indexItems(items); const holderIds = new Set(containers.map((holder) => holder.id)); const fallbackId = containers[0].id;
+  for (const item of items) {
+    if (!holderIds.has(item.containerId)) item.containerId = fallbackId;
+    const parent = byId.get(item.parentItemId);
+    if (item.parentItemId && (!parent || parent.id === item.id || !parent.isContainer)) item.parentItemId = '';
+  }
+  for (const item of items) {
+    const visited = new Set([item.id]); let current = item;
+    while (current.parentItemId) {
+      if (visited.has(current.parentItemId)) { item.parentItemId = ''; break; }
+      visited.add(current.parentItemId); current = byId.get(current.parentItemId);
+      if (!current) { item.parentItemId = ''; break; }
+    }
+  }
+  const resolveHolderId = (item, visited = new Set()) => {
+    if (!item.parentItemId || visited.has(item.id)) return holderIds.has(item.containerId) ? item.containerId : fallbackId;
+    visited.add(item.id);
+    const parent = byId.get(item.parentItemId);
+    return parent ? resolveHolderId(parent, visited) : fallbackId;
+  };
+  for (const item of items) item.containerId = resolveHolderId(item);
+  return items;
 }
 
 function localKey(code) { return `oldHelperCampaign:${normalizeCode(code)}`; }
@@ -192,30 +259,37 @@ function refreshLocal() {
   if (!data) return;
   state.campaign = data.campaign;
   state.containers = (data.containers || []).map(normalizeHolder).sort((a,b) => a.order - b.order);
-  state.items = (data.items || []).map(normalizeItem);
+  state.items = repairItemTree((data.items || []).map(normalizeItem));
   state.history = data.history || [];
   setSync('Salvo neste navegador', 'local');
   renderAll();
 }
 
-async function createCampaign(name, animalName) {
-  const code = makeCode();
-  const campaign = { id:code, name, createdAt:nowISO(), updatedAt:nowISO() };
-  const containers = defaultContainers(animalName);
-  if (state.mode === 'cloud') {
-    const { db, doc, writeBatch, collection, serverTimestamp } = state.cloud;
-    const batch = writeBatch(db);
-    batch.set(doc(db, 'campaigns', code), { ...campaign, createdBy:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() });
-    for (const holder of containers) {
-      const payload = { ...holder }; delete payload.id;
-      batch.set(doc(collection(db, 'campaigns', code, 'containers'), holder.id), payload);
+async function createCampaign(name) {
+  const maxAttempts = 12;
+  let code = '';
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    code = makeCode();
+    const campaign = { id:code, name, createdAt:nowISO(), updatedAt:nowISO() };
+    if (state.mode === 'cloud') {
+      const { db, doc, runTransaction, serverTimestamp } = state.cloud;
+      const campaignRef = doc(db, 'campaigns', code);
+      const created = await runTransaction(db, async (transaction) => {
+        const existing = await transaction.get(campaignRef);
+        if (existing.exists()) return false;
+        transaction.set(campaignRef, { ...campaign, createdBy:state.user.uid, createdAt:serverTimestamp(), updatedAt:serverTimestamp() });
+        return true;
+      });
+      if (!created) continue;
+    } else {
+      if (readLocal(code)) continue;
+      localStorage.setItem(localKey(code), JSON.stringify({ campaign, containers:[], items:[], history:[] }));
     }
-    await batch.commit();
-  } else {
-    localStorage.setItem(localKey(code), JSON.stringify({ campaign, containers, items:[], history:[] }));
+    await enterCampaign(code);
+    await addHistory(`${state.identity.name} criou a campanha.`);
+    return;
   }
-  await enterCampaign(code);
-  await addHistory(`${state.identity.name} criou a campanha.`);
+  throw new Error('Não foi possível gerar um código único. Tente novamente.');
 }
 async function campaignExists(code) {
   if (state.mode === 'cloud') {
@@ -226,10 +300,12 @@ async function campaignExists(code) {
 }
 async function enterCampaign(code) {
   const normalized = normalizeCode(code);
+  if (!normalized) throw new Error('Informe um código alfanumérico válido.');
   if (!await campaignExists(normalized)) throw new Error('Campanha não encontrada. Confira o código.');
   clearListeners();
   state.campaignId = normalized;
   sessionStorage.setItem('oldHelperCampaignId', normalized);
+  updateCampaignURL(normalized);
   dom.landing.classList.add('hidden');
   dom.app.classList.remove('hidden');
   if (state.mode === 'cloud') attachCloudListeners(); else refreshLocal();
@@ -250,10 +326,10 @@ function attachCloudListeners() {
   }, cloudError));
   state.unsubs.push(onSnapshot(query(collection(db, 'campaigns', code, 'containers'), orderBy('order')), (snap) => {
     state.containers = snap.docs.map((d, index) => normalizeHolder({ id:d.id, ...d.data() }, index));
-    renderAll();
+    repairItemTree(); renderAll();
   }, cloudError));
   state.unsubs.push(onSnapshot(collection(db, 'campaigns', code, 'items'), (snap) => {
-    state.items = snap.docs.map((d) => normalizeItem({ id:d.id, ...d.data() }));
+    state.items = repairItemTree(snap.docs.map((d) => normalizeItem({ id:d.id, ...d.data() })));
     renderAll();
   }, cloudError));
   state.unsubs.push(onSnapshot(query(collection(db, 'campaigns', code, 'history'), orderBy('at', 'desc'), limit(100)), (snap) => {
@@ -266,6 +342,7 @@ function leaveCampaign() {
   clearListeners();
   state.campaignId = null; state.campaign = null; state.containers = []; state.items = []; state.history = [];
   sessionStorage.removeItem('oldHelperCampaignId');
+  updateCampaignURL('');
   dom.app.classList.add('hidden'); dom.landing.classList.remove('hidden');
 }
 
@@ -284,15 +361,23 @@ async function addHistory(text) {
 
 async function saveItem(item) {
   const existing = state.items.find((candidate) => candidate.id === item.id);
+  const descendants = existing ? itemDescendants(existing.id) : [];
+  if (existing?.isContainer && !item.isContainer && descendants.length) throw new Error('Transfira ou remova o conteúdo antes de desativar este contêiner.');
   item.updatedAt = nowISO(); item.updatedBy = state.identity.name;
+  const holderChanged = Boolean(existing && existing.containerId !== item.containerId);
   if (state.mode === 'cloud') {
-    const { db, doc, collection, setDoc, serverTimestamp } = state.cloud;
-    const ref = item.id ? doc(db, 'campaigns', state.campaignId, 'items', item.id) : doc(collection(db, 'campaigns', state.campaignId, 'items'));
-    item.id = ref.id;
+    const { db, doc, setDoc, writeBatch, serverTimestamp } = state.cloud;
+    const ref = doc(db, 'campaigns', state.campaignId, 'items', item.id);
     const payload = { ...item, updatedAt:serverTimestamp() }; delete payload.id;
-    await setDoc(ref, payload, { merge:true });
+    if (holderChanged && descendants.length) {
+      const batch = writeBatch(db);
+      batch.set(ref, payload, { merge:true });
+      for (const child of descendants) batch.update(doc(db, 'campaigns', state.campaignId, 'items', child.id), { containerId:item.containerId, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+      await batch.commit();
+    } else await setDoc(ref, payload, { merge:true });
   } else {
-    if (existing) Object.assign(existing, item); else state.items.push({ ...item, id:item.id || uid('item') });
+    if (existing) Object.assign(existing, item); else state.items.push({ ...item });
+    if (holderChanged) for (const child of descendants) Object.assign(child, { containerId:item.containerId, updatedAt:nowISO(), updatedBy:state.identity.name });
     writeLocal(); renderAll();
   }
   await addHistory(existing ? `${state.identity.name} atualizou “${item.name}”.` : `${state.identity.name} adicionou “${item.name}”.`);
@@ -310,6 +395,7 @@ async function patchItem(id, patch, historyText) {
 }
 async function deleteItem(id) {
   const item = state.items.find((candidate) => candidate.id === id); if (!item) return;
+  if (itemDescendants(id).length) return toast('Transfira ou remova o conteúdo antes de excluir este contêiner.', 'error');
   if (!confirm(`Remover “${item.name}” do inventário?`)) return;
   if (state.mode === 'cloud') {
     const { db, doc, deleteDoc } = state.cloud;
@@ -395,6 +481,37 @@ function groupTotals() {
   return { currency, ammo, rations, charges, magicItems };
 }
 
+function destinationValue(item) { return item?.parentItemId ? `item:${item.parentItemId}` : `holder:${item?.containerId || ''}`; }
+function destinationChoices(excludeItemId = '') {
+  const excluded = new Set(excludeItemId ? [excludeItemId, ...itemDescendants(excludeItemId).map((item) => item.id)] : []);
+  const childrenByParent = new Map();
+  for (const item of state.items) {
+    if (!childrenByParent.has(item.parentItemId)) childrenByParent.set(item.parentItemId, []);
+    childrenByParent.get(item.parentItemId).push(item);
+  }
+  for (const children of childrenByParent.values()) children.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const choices = [];
+  const visit = (item, depth) => {
+    if (item.isContainer && !excluded.has(item.id)) choices.push({ value:`item:${item.id}`, label:`${'  '.repeat(depth)}↳ ${item.name}`, containerId:item.containerId, parentItemId:item.id });
+    for (const child of childrenByParent.get(item.id) || []) visit(child, depth + 1);
+  };
+  for (const holder of state.containers) {
+    choices.push({ value:`holder:${holder.id}`, label:holder.name, containerId:holder.id, parentItemId:'' });
+    for (const root of (childrenByParent.get('') || []).filter((item) => item.containerId === holder.id)) visit(root, 1);
+  }
+  return choices;
+}
+function resolveDestination(value, excludeItemId = '') {
+  const target = destinationChoices(excludeItemId).find((choice) => choice.value === value);
+  if (!target) throw new Error('Escolha um portador ou item contêiner válido.');
+  return target;
+}
+function populateItemDestinationSelect(excludeItemId = '', preferredValue = '') {
+  const choices = destinationChoices(excludeItemId);
+  dom.itemContainer.innerHTML = choices.map((choice) => `<option value="${esc(choice.value)}">${esc(choice.label)}</option>`).join('');
+  if (choices.some((choice) => choice.value === preferredValue)) dom.itemContainer.value = preferredValue;
+}
+
 function renderAll() {
   if (!state.campaign) return;
   dom.campaignTitle.textContent = state.campaign.name || 'Carga do Grupo';
@@ -409,11 +526,10 @@ function populateContainerSelects() {
   const currentDestination = dom.rationDestination.value;
   const options = state.containers.map((holder) => `<option value="${esc(holder.id)}">${esc(holder.name)}</option>`).join('');
   dom.containerFilter.innerHTML = `<option value="">Todos</option>${options}`;
-  dom.itemContainer.innerHTML = options;
+  populateItemDestinationSelect(dom.itemId.value, currentItem);
   dom.rationPayer.innerHTML = options;
   dom.rationDestination.innerHTML = options;
   if ([...dom.containerFilter.options].some((option) => option.value === currentFilter)) dom.containerFilter.value = currentFilter;
-  if ([...dom.itemContainer.options].some((option) => option.value === currentItem)) dom.itemContainer.value = currentItem;
   if ([...dom.rationPayer.options].some((option) => option.value === currentPayer)) dom.rationPayer.value = currentPayer;
   else dom.rationPayer.value = state.containers.find((holder) => holder.type === 'animal')?.id || state.containers[0]?.id || '';
   if ([...dom.rationDestination.options].some((option) => option.value === currentDestination)) dom.rationDestination.value = currentDestination;
@@ -439,7 +555,7 @@ function renderDashboard() {
   dom.walletSummary.innerHTML = state.containers.length ? state.containers.map((holder) => {
     const wallet = holderWallet(holder.id);
     return `<div class="wallet-row"><div><div class="wallet-name">${esc(holder.name)}</div><div class="wallet-kind">${esc(holderKind(holder))}</div></div><div class="coin-stack"><span class="coin-pill">${formatNumber(wallet.PO,0)} PO</span><span class="coin-pill">${formatNumber(wallet.PP,0)} PP</span><span class="coin-pill">${formatNumber(wallet.PC,0)} PC</span></div></div>`;
-  }).join('') : '<p class="field-help">Nenhum portador cadastrado.</p>';
+  }).join('') : '<div class="empty-state"><div>👥</div><h3>Configure o grupo</h3><p>Adicione um personagem ou animal de carga na tela Grupo para começar.</p></div>';
 
   const alerts = [];
   for (const holder of state.containers) {
@@ -452,7 +568,8 @@ function renderDashboard() {
   const totals = groupTotals();
   const daily = state.containers.filter((h) => h.active && h.consumesRations).reduce((sum, h) => sum + num(h.dailyRations), 0);
   if (daily > 0 && totals.rations < daily * 3) alerts.push({ kind:'danger', text:`O estoque de rações dura menos de 3 dias para o grupo ativo.` });
-  if (!alerts.length) alerts.push({ kind:'ok', text:'Nenhum alerta importante no momento.' });
+  if (!state.containers.length) alerts.push({ kind:'', text:'O grupo está vazio. Adicione o primeiro personagem ou animal de carga.' });
+  else if (!alerts.length) alerts.push({ kind:'ok', text:'Nenhum alerta importante no momento.' });
   dom.alertsSummary.innerHTML = alerts.slice(0, 10).map((alert) => `<div class="alert-item ${alert.kind}"><span>${alert.kind === 'danger' ? '!' : alert.kind === 'ok' ? '✓' : '•'}</span><span>${esc(alert.text)}</span></div>`).join('');
 }
 
@@ -460,11 +577,15 @@ function filteredItems() {
   const query = dom.searchInput.value.trim().toLowerCase();
   const category = dom.categoryFilter.value;
   const containerId = dom.containerFilter.value;
-  return state.items.filter((item) => {
+  const matched = state.items.filter((item) => {
     const holder = state.containers.find((candidate) => candidate.id === item.containerId);
     const haystack = `${item.name} ${item.description || ''} ${item.notes || ''} ${holder?.name || ''}`.toLowerCase();
     return (!query || haystack.includes(query)) && (!category || item.category === category) && (!containerId || item.containerId === containerId);
   });
+  if (!query && !category) return matched;
+  const visibleIds = new Set(matched.map((item) => item.id));
+  for (const item of matched) for (const ancestor of itemAncestors(item.id)) visibleIds.add(ancestor.id);
+  return state.items.filter((item) => visibleIds.has(item.id) && (!containerId || item.containerId === containerId));
 }
 function renderInventory() {
   const visible = filteredItems();
@@ -486,16 +607,22 @@ function renderContainer(holder, items) {
   const subtitleParts = [holderKind(holder)];
   if (holder.type === 'character') subtitleParts.push(`FOR ${num(holder.strength,10)} · CON ${num(holder.constitution,10)}`);
   if (totalItems.some((item) => item.isBackpack && num(item.qty) > 0)) subtitleParts.push('mochila +5');
-  const rows = items.length
-    ? `<ul class="item-list">${items.sort((a,b) => a.name.localeCompare(b.name, 'pt-BR')).map(renderItem).join('')}</ul>`
+  const visibleIds = new Set(items.map((item) => item.id));
+  const roots = items.filter((item) => !item.parentItemId || !visibleIds.has(item.parentItemId)).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const rows = roots.length
+    ? `<ul class="item-list">${roots.map((item) => renderItemNode(item, visibleIds)).join('')}</ul>`
     : '<div class="empty-container">Nenhum item neste portador com os filtros atuais.</div>';
   return `<article class="card container-card"><header class="container-header"><div class="container-title-row"><div><h2>${esc(holder.name)}</h2><div class="container-subtitle">${esc(subtitleParts.join(' · '))} · ${plural(totalItems.length, 'tipo de item')}</div></div><div class="load-number">${formatNumber(load)} / ${formatNumber(capacity)}</div></div><div class="load-track" title="Carga"><div class="load-fill ${loadClass}" style="width:${percent}%"></div></div></header>${rows}</article>`;
+}
+function renderItemNode(item, visibleIds) {
+  const children = itemChildren(item.id).filter((child) => visibleIds.has(child.id)).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+  return `<li class="item-node">${renderItem(item)}${children.length ? `<ul class="item-children">${children.map((child) => renderItemNode(child, visibleIds)).join('')}</ul>` : ''}</li>`;
 }
 function renderItem(item) {
   const icon = categoryIcons[item.category] || '•';
   const charges = num(item.maxCharges) > 0 ? `<span class="tag">✦ ${formatNumber(item.charges,0)}/${formatNumber(item.maxCharges,0)} cargas</span>` : '';
   const load = item.category === 'Moeda' ? '1 carga/100 moedas' : `${formatNumber(item.loadPerUnit)} carga/un.`;
-  return `<li class="item-row" data-id="${esc(item.id)}"><div><div class="item-name">${icon} ${esc(item.name)}</div>${item.description ? `<p class="item-description">${esc(item.description)}</p>` : ''}<div class="item-meta"><span class="tag">${esc(item.category)}</span><span>${formatNumber(item.qty)} ${esc(item.unit || 'un.')}</span>${charges}<span>${esc(load)}</span>${item.isBackpack ? '<span class="tag">mochila equipada</span>' : ''}</div>${item.notes ? `<p class="item-notes"><strong>Observações:</strong> ${esc(item.notes)}</p>` : ''}</div><div class="item-actions"><div class="counter" aria-label="Quantidade"><button data-action="qty-minus" title="Diminuir">−</button><span>${formatNumber(item.qty)}</span><button data-action="qty-plus" title="Aumentar">＋</button></div>${num(item.maxCharges) > 0 ? `<div class="counter" aria-label="Cargas"><button data-action="charge-minus" title="Usar carga">−</button><span>✦ ${formatNumber(item.charges,0)}</span><button data-action="charge-plus" title="Repor carga">＋</button></div>` : ''}<div class="mini-actions"><button class="mini-button" data-action="transfer" title="Transferir">⇄</button><button class="mini-button" data-action="edit" title="Editar">✎</button><button class="mini-button" data-action="delete" title="Excluir">×</button></div></div></li>`;
+  return `<div class="item-row" data-id="${esc(item.id)}"><div><div class="item-name">${icon} ${esc(item.name)}</div>${item.description ? `<p class="item-description">${esc(item.description)}</p>` : ''}<div class="item-meta"><span class="tag">${esc(item.category)}</span><span>${formatNumber(item.qty)} ${esc(item.unit || 'un.')}</span>${charges}<span>${esc(load)}</span>${item.isBackpack ? '<span class="tag">mochila equipada</span>' : ''}${item.isContainer ? '<span class="tag container-tag">▣ contêiner</span>' : ''}</div>${item.notes ? `<p class="item-notes"><strong>Observações:</strong> ${esc(item.notes)}</p>` : ''}</div><div class="item-actions"><div class="counter" aria-label="Quantidade"><button data-action="qty-minus" title="Diminuir">−</button><span>${formatNumber(item.qty)}</span><button data-action="qty-plus" title="Aumentar">＋</button></div>${num(item.maxCharges) > 0 ? `<div class="counter" aria-label="Cargas"><button data-action="charge-minus" title="Usar carga">−</button><span>✦ ${formatNumber(item.charges,0)}</span><button data-action="charge-plus" title="Repor carga">＋</button></div>` : ''}<div class="mini-actions"><button class="mini-button" data-action="transfer" title="Transferir">⇄</button><button class="mini-button" data-action="edit" title="Editar">✎</button><button class="mini-button" data-action="delete" title="Excluir">×</button></div></div></div>`;
 }
 function bindInventoryActions() {
   dom.inventory.querySelectorAll('[data-action]').forEach((button) => button.addEventListener('click', async (event) => {
@@ -513,19 +640,34 @@ function bindInventoryActions() {
   }));
 }
 async function transferItem(item) {
-  const choices = state.containers.filter((holder) => holder.id !== item.containerId);
-  if (!choices.length) return toast('Adicione outro portador antes de transferir.', 'error');
-  const answer = prompt(`Transferir “${item.name}” para:\n${choices.map((holder,index) => `${index + 1}. ${holder.name}`).join('\n')}\n\nDigite o número:`);
+  const currentValue = destinationValue(item);
+  const choices = destinationChoices(item.id).filter((choice) => choice.value !== currentValue);
+  if (!choices.length) return toast('Não há outro destino válido para este item.', 'error');
+  const answer = prompt(`Transferir “${item.name}” para:\n${choices.map((choice,index) => `${index + 1}. ${choice.label}`).join('\n')}\n\nDigite o número:`);
   const target = choices[Number(answer) - 1]; if (!target) return;
-  const origin = state.containers.find((holder) => holder.id === item.containerId);
-  await patchItem(item.id, { containerId:target.id }, `${state.identity.name} transferiu “${item.name}” de ${origin?.name || 'outro portador'} para ${target.name}.`);
+  const originItem = state.items.find((candidate) => candidate.id === item.parentItemId);
+  const originHolder = state.containers.find((holder) => holder.id === item.containerId);
+  const originLabel = originItem?.name || originHolder?.name || 'outro destino';
+  const descendants = itemDescendants(item.id);
+  if (state.mode === 'cloud') {
+    const { db, doc, writeBatch, serverTimestamp } = state.cloud;
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'campaigns', state.campaignId, 'items', item.id), { containerId:target.containerId, parentItemId:target.parentItemId, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+    for (const child of descendants) batch.update(doc(db, 'campaigns', state.campaignId, 'items', child.id), { containerId:target.containerId, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+    await batch.commit();
+  } else {
+    Object.assign(item, { containerId:target.containerId, parentItemId:target.parentItemId, updatedAt:nowISO(), updatedBy:state.identity.name });
+    for (const child of descendants) Object.assign(child, { containerId:target.containerId, updatedAt:nowISO(), updatedBy:state.identity.name });
+    writeLocal(); renderAll();
+  }
+  await addHistory(`${state.identity.name} transferiu “${item.name}”${descendants.length ? ` com ${plural(descendants.length, 'item contido', 'itens contidos')}` : ''} de ${originLabel} para ${target.label.trim()}.`);
 }
 
 function renderRationParticipants() {
   const checkedIds = new Set([...dom.rationParticipants.querySelectorAll('input:checked')].map((input) => input.value));
   const eligible = state.containers.filter((holder) => holder.consumesRations && num(holder.dailyRations) > 0);
   if (!eligible.length) {
-    dom.rationParticipants.innerHTML = '<p class="field-help">Nenhum participante com consumo de rações. Configure o grupo.</p>';
+    dom.rationParticipants.innerHTML = `<div class="empty-state"><div>🍞</div><h3>${state.containers.length ? 'Nenhum consumo configurado' : 'Configure o grupo primeiro'}</h3><p>${state.containers.length ? 'Edite um integrante e informe seu consumo diário.' : 'Adicione um personagem ou animal antes de planejar ou comprar rações.'}</p></div>`;
     return;
   }
   dom.rationParticipants.innerHTML = eligible.map((holder) => {
@@ -559,7 +701,8 @@ function renderRationCalculator() {
   const destination = state.containers.find((holder) => holder.id === calc.destinationId);
   let status = '';
   let statusClass = '';
-  if (!calc.participants.length) { status = 'Selecione pelo menos um participante.'; statusClass = 'error'; }
+  if (!state.containers.length) { status = 'Adicione um personagem ou animal antes de planejar ou comprar rações.'; statusClass = 'error'; }
+  else if (!calc.participants.length) { status = 'Selecione pelo menos um participante.'; statusClass = 'error'; }
   else if (calc.missing === 0) status = 'O estoque atual já atende ao planejamento.';
   else if (!payer || !destination) { status = 'Selecione o pagador e o destino.'; statusClass = 'error'; }
   else if (calc.balance < calc.cost) { status = `${payer.name} não possui ${calc.cost} ${calc.currency}. Saldo atual: ${formatNumber(calc.balance,0)} ${calc.currency}.`; statusClass = 'error'; }
@@ -580,6 +723,7 @@ function renderRationCalculator() {
 }
 async function purchaseRations() {
   const calc = rationCalculation();
+  if (!state.containers.length) throw new Error('Adicione um personagem ou animal antes de comprar rações.');
   if (!calc.participants.length) throw new Error('Selecione pelo menos um participante.');
   if (calc.missing <= 0) throw new Error('O estoque já é suficiente.');
   const payer = state.containers.find((holder) => holder.id === calc.payerId);
@@ -614,7 +758,7 @@ async function purchaseRations() {
       } else {
         transaction.set(rationRef, {
           name:'Rações de viagem', description:'Estoque de rações adquirido pela calculadora de viagem.', category:'Ração',
-          containerId:calc.destinationId, qty:calc.missing, unit:'rações', loadPerUnit:0, isBackpack:false,
+          containerId:calc.destinationId, parentItemId:'', isContainer:false, qty:calc.missing, unit:'rações', loadPerUnit:0, isBackpack:false,
           charges:0, maxCharges:0, notes:'', updatedAt:serverTimestamp(), updatedBy:state.identity.name
         });
       }
@@ -672,14 +816,15 @@ function openItemDialog(item = null) {
   dom.itemForm.reset();
   dom.itemDialogTitle.textContent = item ? 'Editar item' : 'Adicionar item';
   dom.itemId.value = item?.id || '';
+  populateItemDestinationSelect(item?.id || '', item ? destinationValue(item) : `holder:${state.containers[0]?.id || ''}`);
   dom.itemName.value = item?.name || '';
   dom.itemDescription.value = item?.description || '';
   dom.itemCategory.value = item?.category || 'Equipamento';
-  dom.itemContainer.value = item?.containerId || state.containers[0]?.id || '';
   dom.itemQty.value = item?.qty ?? 1;
   dom.itemUnit.value = item?.unit || 'un.';
   dom.itemLoad.value = item?.loadPerUnit ?? 0;
   dom.itemBackpack.checked = Boolean(item?.isBackpack);
+  dom.itemIsContainer.checked = Boolean(item?.isContainer);
   dom.itemCharges.value = item?.charges ?? 0;
   dom.itemMaxCharges.value = item?.maxCharges ?? 0;
   dom.itemNotes.value = item?.notes || '';
@@ -687,9 +832,11 @@ function openItemDialog(item = null) {
 }
 function itemFromForm() {
   const maxCharges = Math.max(0, num(dom.itemMaxCharges.value));
+  const destination = resolveDestination(dom.itemContainer.value, dom.itemId.value);
   return normalizeItem({
     id:dom.itemId.value || null, name:dom.itemName.value.trim(), description:dom.itemDescription.value.trim(), category:dom.itemCategory.value,
-    containerId:dom.itemContainer.value, qty:Math.max(0, num(dom.itemQty.value)), unit:dom.itemUnit.value,
+    containerId:destination.containerId, parentItemId:destination.parentItemId, isContainer:dom.itemIsContainer.checked,
+    qty:Math.max(0, num(dom.itemQty.value)), unit:dom.itemUnit.value,
     loadPerUnit:Math.max(0, num(dom.itemLoad.value)), isBackpack:dom.itemBackpack.checked,
     charges:Math.min(maxCharges, Math.max(0, num(dom.itemCharges.value))), maxCharges, notes:dom.itemNotes.value.trim()
   });
@@ -712,8 +859,7 @@ function updateHolderFieldVisibility() {
   if (stash) {
     dom.holderConsumesRations.checked = false;
     dom.holderDailyRations.value = 0;
-  } else if (num(dom.holderDailyRations.value) === 0) {
-    dom.holderConsumesRations.checked = true;
+  } else if (dom.holderDailyRations.value === '') {
     dom.holderDailyRations.value = 1;
   }
   dom.holderDailyRations.disabled = !dom.holderConsumesRations.checked;
@@ -743,7 +889,7 @@ function holderFromForm() {
     id:dom.holderId.value || uid('holder'), name:dom.holderName.value.trim(), type, subtype:dom.holderSubtype.value.trim(),
     player:dom.holderPlayer.value.trim(), order:existing?.order ?? Math.max(0, ...state.containers.map((holder) => num(holder.order))) + 1,
     strength:num(dom.holderStrength.value, 10), constitution:num(dom.holderConstitution.value, 10),
-    capacity:num(dom.holderCapacity.value, type === 'animal' ? 20 : 0), active:dom.holderActive.checked,
+    capacity:Math.max(0, num(dom.holderCapacity.value, type === 'animal' ? 20 : 0)), active:dom.holderActive.checked,
     consumesRations:dom.holderConsumesRations.checked, dailyRations:Math.max(0, num(dom.holderDailyRations.value, 1))
   });
 }
@@ -777,7 +923,7 @@ async function saveSettings() {
   await addHistory(`${state.identity.name} atualizou as configurações da campanha.`);
 }
 function exportCampaign() {
-  const data = JSON.stringify({ version:3, exportedAt:nowISO(), campaign:state.campaign, containers:state.containers, items:state.items, history:state.history }, null, 2);
+  const data = JSON.stringify({ version:4, exportedAt:nowISO(), campaign:state.campaign, containers:state.containers, items:state.items, history:state.history }, null, 2);
   const blob = new Blob([data], { type:'application/json' });
   const anchor = document.createElement('a');
   anchor.href = URL.createObjectURL(blob); anchor.download = `old-helper-${state.campaignId}.json`; anchor.click(); URL.revokeObjectURL(anchor.href);
@@ -786,7 +932,7 @@ async function importCampaign(file) {
   const data = JSON.parse(await file.text());
   if (!data.campaign || !Array.isArray(data.containers) || !Array.isArray(data.items)) throw new Error('Arquivo inválido.');
   const containers = data.containers.map(normalizeHolder);
-  const items = data.items.map(normalizeItem);
+  const items = repairItemTree(data.items.map(normalizeItem), containers);
   if (state.mode === 'cloud') {
     const { db, doc, collection, getDocs, writeBatch, setDoc } = state.cloud;
     await setDoc(doc(db, 'campaigns', state.campaignId), { ...data.campaign, id:state.campaignId, name:data.campaign.name || state.campaign.name }, { merge:true });
@@ -829,23 +975,35 @@ function switchView(view, updateHash = true) {
   state.activeView = next;
   document.querySelectorAll('[data-view]').forEach((button) => button.classList.toggle('active', button.dataset.view === next));
   document.querySelectorAll('[data-view-panel]').forEach((panel) => panel.classList.toggle('active', panel.dataset.viewPanel === next));
-  if (updateHash) history.replaceState(null, '', `#${next}`);
+  if (updateHash) {
+    const url = new URL(location.href);
+    url.hash = next;
+    history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }
   if (next === 'racoes') renderRationCalculator();
 }
 
 function bindEvents() {
   dom.createForm.addEventListener('submit', async (event) => {
-    event.preventDefault(); if (!identityValid()) return;
-    try { await createCampaign(dom.campaignName.value.trim(), dom.animalName.value.trim()); } catch (error) { toast(error.message, 'error'); }
+    event.preventDefault(); useLocalIdentity();
+    try { await createCampaign(dom.campaignName.value.trim()); } catch (error) { toast(error.message, 'error'); }
   });
   dom.joinForm.addEventListener('submit', async (event) => {
-    event.preventDefault(); if (!identityValid()) return;
-    try { await enterCampaign(normalizeCode(dom.joinCode.value)); await addHistory(`${state.identity.name} entrou na campanha.`); } catch (error) { toast(error.message, 'error'); }
+    event.preventDefault(); useLocalIdentity();
+    try { await enterCampaign(dom.joinCode.value); await addHistory(`${state.identity.name} entrou na campanha.`); } catch (error) { toast(error.message, 'error'); }
   });
   dom.joinCode.addEventListener('input', (event) => { event.target.value = normalizeCode(event.target.value); });
   dom.copyCodeBtn.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(state.campaignId); toast('Código copiado.'); }
-    catch { toast(`Código da campanha: ${state.campaignId}`); }
+    const link = campaignShareURL();
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard API indisponível');
+      await navigator.clipboard.writeText(link);
+      toast(state.mode === 'local' ? 'Link copiado. No modo local, ele funciona somente neste navegador e origem.' : 'Link da campanha copiado.');
+    } catch {
+      prompt(state.mode === 'local'
+        ? 'Copie o link abaixo. No modo local, ele funciona somente neste navegador e origem:'
+        : 'Copie o link da campanha:', link);
+    }
   });
   dom.leaveBtn.addEventListener('click', leaveCampaign);
   dom.settingsBtn.addEventListener('click', openSettings);
@@ -864,7 +1022,7 @@ function bindEvents() {
     try {
       const item = itemFromForm();
       if (!item.name) throw new Error('Informe o nome do item.');
-      if (!item.containerId) throw new Error('Escolha o portador.');
+      if (!item.containerId) throw new Error('Escolha onde o item será guardado.');
       await saveItem(item); dom.itemDialog.close();
     } catch (error) { toast(error.message, 'error'); }
   });
@@ -887,6 +1045,8 @@ function bindEvents() {
     try {
       const holder = holderFromForm();
       if (!holder.name) throw new Error('Informe o nome do portador.');
+      if (num(dom.holderDailyRations.value) < 0) throw new Error('O consumo diário deve ser maior ou igual a zero.');
+      if (holder.type !== 'character' && num(dom.holderCapacity.value) < 0) throw new Error('A capacidade deve ser maior ou igual a zero.');
       await saveHolder(holder); dom.holderDialog.close();
     } catch (error) { toast(error.message, 'error'); }
   });
@@ -924,9 +1084,16 @@ async function boot() {
   if (savedIdentity) { dom.displayName.value = savedIdentity.name || ''; dom.userRole.value = savedIdentity.role || 'player'; }
   bindEvents();
   await initCloud();
+  state.identity = savedIdentity || { name:'Jogador', role:'player' };
+  const requested = campaignCodeFromURL();
   const resume = sessionStorage.getItem('oldHelperCampaignId');
-  if (resume && savedIdentity) {
-    state.identity = savedIdentity;
+  if (requested.present) {
+    dom.joinCode.value = requested.code;
+    useLocalIdentity();
+    if (!requested.valid) toast('O código do link é inválido. Corrija-o para tentar novamente.', 'error');
+    else try { await enterCampaign(requested.code); } catch (error) { toast(error.message, 'error'); }
+  } else if (resume) {
+    useLocalIdentity();
     try { await enterCampaign(resume); } catch { sessionStorage.removeItem('oldHelperCampaignId'); }
   }
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('./service-worker.js').catch(console.warn);

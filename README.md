@@ -9,12 +9,15 @@ Aplicativo web simples para inventário compartilhado em sessões de Old Dragon 
 - Adição, edição e remoção segura de portadores.
 - Transferência automática de todos os itens antes de remover um portador ocupado.
 - Itens com nome, descrição editável, observações, quantidade, carga e portador.
+- Itens podem funcionar como contêineres de outros itens, com organização em vários níveis.
 - Controle de flechas, virotes, rações, moedas e cargas de itens mágicos.
 - Ouro/PO, PP e PC armazenados com qualquer personagem ou animal.
 - Calculadora de rações por participante, dias e margem de segurança.
 - Compra direta de rações: debita as moedas do portador escolhido e adiciona o estoque ao destino.
 - Transação atômica no Firestore para evitar compras parcialmente registradas.
-- Histórico de alterações.
+- Acesso sem conta ou senha por código alfanumérico ou link de campanha.
+- Campanhas novas com grupo vazio, pronto para cadastrar personagens e animais reais.
+- Histórico de alterações atribuído a um apelido salvo somente no navegador.
 - Exportação e importação de campanha em JSON.
 - PWA instalável e hospedagem preparada para Firebase Hosting.
 
@@ -52,6 +55,17 @@ http://localhost:8080
 
 Nesse modo, os dados ficam no `localStorage` do navegador e são compartilhados apenas entre abas da mesma origem.
 
+## Acessar e compartilhar campanhas
+
+Ao criar uma campanha, o app gera um código alfanumérico e atualiza a URL com `?campaign=CODIGO`. Outros participantes podem digitar esse código na tela inicial ou abrir o link copiado ao clicar no código da campanha.
+
+Não há cadastro de conta, e-mail ou senha. O apelido e o perfil da tela inicial são apenas uma identificação local para o histórico; se o apelido estiver vazio, o app usa `Jogador` e não bloqueia a abertura de links.
+
+- **Modo local:** o link só encontra a campanha na mesma origem e no mesmo navegador em que ela foi criada. Ele não transfere dados para outro dispositivo.
+- **Modo Firebase:** o mesmo código ou link abre os dados sincronizados em navegadores e dispositivos diferentes.
+
+O acesso funciona por posse do código: qualquer pessoa que conheça o código pode abrir e alterar a campanha. O código não deve ser tratado como uma senha forte.
+
 ## Configurar Firebase Authentication e Firestore
 
 ### 1. Criar o projeto
@@ -78,7 +92,7 @@ export const firebaseConfig = {
 
 A configuração Web pode ficar no site publicado. A segurança do banco é controlada pelas regras do Firestore, não pelo segredo desses valores.
 
-### 3. Ativar login anônimo
+### 3. Ativar autenticação anônima
 
 No Firebase Console:
 
@@ -86,7 +100,7 @@ No Firebase Console:
 2. Entre em **Sign-in method**.
 3. Ative o provedor **Anonymous/Anônimo**.
 
-O app faz esse login automaticamente. Os jogadores não precisam criar conta ou senha.
+O app realiza essa autenticação técnica automaticamente e em segundo plano para que as regras do Firestore não precisem tornar o banco público. Ela não é apresentada como login: jogadores e Mestre não criam conta nem informam senha.
 
 ### 4. Criar o Firestore
 
@@ -94,7 +108,7 @@ O app faz esse login automaticamente. Os jogadores não precisam criar conta ou 
 2. Crie o banco.
 3. Escolha a região apropriada para o grupo.
 
-Não é necessário criar coleções manualmente. O app cria `campaigns`, `containers`, `items` e `history` quando os dados forem usados.
+Não é necessário criar coleções manualmente. O app cria `campaigns` e, conforme o grupo for configurado, suas subcoleções `containers`, `items` e `history`. Campanhas novas não recebem personagens, animais ou itens predefinidos.
 
 ## Publicar regras e site no Firebase Hosting
 
@@ -142,6 +156,15 @@ Para publicar somente as regras:
 firebase deploy --only firestore:rules
 ```
 
+## Como organizar itens dentro de outros itens
+
+1. No Inventário, adicione ou edite o item que servirá de recipiente.
+2. Ative **Pode guardar outros itens** e salve.
+3. Ao adicionar, editar ou transferir outro item, selecione o recipiente no campo **Guardado em**.
+4. O conteúdo aparecerá recuado abaixo do item contêiner e continuará contando para a carga e os totais do portador principal.
+
+Contêineres podem ser aninhados em vários níveis e são transferidos junto com todo o seu conteúdo. Para evitar perda acidental, um contêiner não pode ser desmarcado nem excluído enquanto possuir itens. Esta versão não aplica capacidade máxima, redução de carga ou regras dimensionais aos recipientes.
+
 ## Como registrar ouro no animal de carga
 
 No Inventário:
@@ -166,7 +189,7 @@ O estoque atual considera todos os itens da categoria `Ração` na campanha.
 
 ## Segurança do MVP
 
-As regras incluídas exigem autenticação, mas qualquer usuário autenticado que conheça o código da campanha pode alterar os dados. Isso é adequado para um grupo privado pequeno. Para transformar o projeto em serviço público, implemente membros por campanha, convites e permissões de Mestre.
+As regras incluídas exigem a autenticação anônima e invisível feita pelo app, mas qualquer pessoa que conheça o código da campanha pode alterar os dados. O modelo de acesso é por posse do código, adequado para um grupo privado pequeno; o código não é uma credencial forte. Para transformar o projeto em serviço público, implemente membros por campanha, convites e permissões de Mestre.
 
 ## Atualização de uma versão anterior
 
