@@ -27,9 +27,9 @@ const dom = {
   transferQuantityHelp: $('transferQuantityHelp'), transferContentsWarning: $('transferContentsWarning'),
   holderDialog: $('holderDialog'), holderForm: $('holderForm'), holderDialogTitle: $('holderDialogTitle'), holderId: $('holderId'),
   holderName: $('holderName'), holderType: $('holderType'), holderSubtype: $('holderSubtype'), holderPlayer: $('holderPlayer'),
-  holderStrength: $('holderStrength'), holderConstitution: $('holderConstitution'), holderCapacity: $('holderCapacity'),
+  holderMine: $('holderMine'), holderStrength: $('holderStrength'), holderConstitution: $('holderConstitution'), holderCapacity: $('holderCapacity'),
   holderActive: $('holderActive'), holderConsumesRations: $('holderConsumesRations'), holderDailyRations: $('holderDailyRations'),
-  holderPlayerLabel: $('holderPlayerLabel'), holderStrengthLabel: $('holderStrengthLabel'),
+  holderPlayerLabel: $('holderPlayerLabel'), holderMineLabel: $('holderMineLabel'), holderStrengthLabel: $('holderStrengthLabel'),
   holderConstitutionLabel: $('holderConstitutionLabel'), holderCapacityLabel: $('holderCapacityLabel'),
   removeHolderDialog: $('removeHolderDialog'), removeHolderForm: $('removeHolderForm'), removeHolderId: $('removeHolderId'),
   removeHolderMessage: $('removeHolderMessage'), removeTargetLabel: $('removeTargetLabel'), removeHolderTarget: $('removeHolderTarget'),
@@ -128,6 +128,17 @@ function rememberedCampaign() {
 function forgetCampaign() {
   localStorage.removeItem(LAST_CAMPAIGN_KEY);
   sessionStorage.removeItem(LAST_CAMPAIGN_KEY);
+}
+function ownedCharacterKey() { return `oldHelperOwnedCharacter:${state.campaignId || ''}`; }
+function ownedCharacterId() { return state.campaignId ? localStorage.getItem(ownedCharacterKey()) || '' : ''; }
+function setOwnedCharacter(holderId = '') {
+  if (!state.campaignId) return;
+  if (holderId) localStorage.setItem(ownedCharacterKey(), holderId);
+  else localStorage.removeItem(ownedCharacterKey());
+}
+function compareHoldersForDisplay(a, b) {
+  const mine = ownedCharacterId();
+  return Number(b.id === mine) - Number(a.id === mine) || num(a.order) - num(b.order) || a.name.localeCompare(b.name, 'pt-BR');
 }
 function updateCampaignURL(code = state.campaignId) {
   const url = new URL(location.href);
@@ -543,6 +554,7 @@ async function removeHolder(holderId, targetId = '') {
     state.history.unshift({ id:uid('history'), text:`${state.identity.name} removeu ${holder.name}${affected.length ? ` e transferiu seus itens para ${target?.name}` : ''}.`, by:state.identity.name, at:nowISO() });
     writeLocal(); renderAll();
   }
+  if (holderId === ownedCharacterId()) setOwnedCharacter('');
 }
 
 function containerCapacity(container) {
@@ -606,7 +618,7 @@ function destinationChoices(excludeItemId = '') {
     if (item.isContainer && !excluded.has(item.id)) choices.push({ value:`item:${item.id}`, label:`${'  '.repeat(depth)}↳ ${item.name}`, containerId:item.containerId, parentItemId:item.id });
     for (const child of childrenByParent.get(item.id) || []) visit(child, depth + 1);
   };
-  for (const holder of state.containers) {
+  for (const holder of [...state.containers].sort(compareHoldersForDisplay)) {
     choices.push({ value:`holder:${holder.id}`, label:holder.name, containerId:holder.id, parentItemId:'' });
     for (const root of (childrenByParent.get('') || []).filter((item) => item.containerId === holder.id)) visit(root, 1);
   }
@@ -635,7 +647,7 @@ function populateContainerSelects() {
   const currentItem = dom.itemContainer.value;
   const currentPayer = dom.rationPayer.value;
   const currentDestination = dom.rationDestination.value;
-  const options = state.containers.map((holder) => `<option value="${esc(holder.id)}">${esc(holder.name)}</option>`).join('');
+  const options = [...state.containers].sort(compareHoldersForDisplay).map((holder) => `<option value="${esc(holder.id)}">${esc(holder.name)}</option>`).join('');
   dom.containerFilter.innerHTML = `<option value="">Todos</option>${options}`;
   populateItemDestinationSelect(dom.itemId.value, currentItem);
   dom.rationPayer.innerHTML = options;
@@ -663,7 +675,7 @@ function renderSummary() {
   dom.summary.innerHTML = cards.map(([label,value,detail]) => `<article class="card summary-card"><span class="summary-label">${esc(label)}</span><strong class="summary-value">${esc(value)}</strong><span class="summary-detail">${esc(detail)}</span></article>`).join('');
 }
 function renderDashboard() {
-  dom.walletSummary.innerHTML = state.containers.length ? state.containers.map((holder) => {
+  dom.walletSummary.innerHTML = state.containers.length ? [...state.containers].sort(compareHoldersForDisplay).map((holder) => {
     const wallet = holderWallet(holder.id);
     return `<div class="wallet-row"><div><div class="wallet-name">${esc(holder.name)}</div><div class="wallet-kind">${esc(holderKind(holder))}</div></div><div class="coin-stack"><span class="coin-pill">${formatNumber(wallet.PO,0)} PO</span><span class="coin-pill">${formatNumber(wallet.PP,0)} PP</span><span class="coin-pill">${formatNumber(wallet.PC,0)} PC</span></div></div>`;
   }).join('') : '<div class="empty-state"><div aria-hidden="true"><i class="ra ra-player"></i></div><h3>Configure o grupo</h3><p>Adicione um personagem ou animal de carga na tela Grupo para começar.</p></div>';
@@ -711,7 +723,7 @@ function renderInventory() {
   updateBulkTransferButton();
   const visible = filteredItems();
   const selected = dom.containerFilter.value;
-  const holders = state.containers.filter((holder) => !selected || holder.id === selected);
+  const holders = state.containers.filter((holder) => !selected || holder.id === selected).sort(compareHoldersForDisplay);
   if (!holders.length) {
     dom.inventory.innerHTML = '';
     dom.inventory.append($('emptyTemplate').content.cloneNode(true));
@@ -922,7 +934,7 @@ async function bulkTransferToAnimal() {
 
 function renderRationParticipants() {
   const checkedIds = new Set([...dom.rationParticipants.querySelectorAll('input:checked')].map((input) => input.value));
-  const eligible = state.containers.filter((holder) => holder.consumesRations && num(holder.dailyRations) > 0);
+  const eligible = state.containers.filter((holder) => holder.consumesRations && num(holder.dailyRations) > 0).sort(compareHoldersForDisplay);
   if (!eligible.length) {
     dom.rationParticipants.innerHTML = `<div class="empty-state"><div aria-hidden="true"><i class="ra ra-apple"></i></div><h3>${state.containers.length ? 'Nenhum consumo configurado' : 'Configure o grupo primeiro'}</h3><p>${state.containers.length ? 'Edite um integrante e informe seu consumo diário.' : 'Adicione um personagem ou animal antes de planejar ou comprar rações.'}</p></div>`;
     return;
@@ -1055,12 +1067,13 @@ function renderGroup() {
     const wallet = holderWallet(holder.id);
     const itemCount = state.items.filter((item) => item.containerId === holder.id).length;
     const load = containerLoad(holder.id); const capacity = containerCapacity(holder);
-    return `<article class="card group-card" data-id="${esc(holder.id)}"><div class="group-card-header"><div><h3>${esc(holder.name)}</h3><div class="group-type">${esc(holderKind(holder))}${holder.player ? ` · ${esc(holder.player)}` : ''}</div></div><span class="group-status ${holder.active ? '' : 'inactive'}">${holder.active ? 'Ativo' : 'Fora da viagem'}</span></div><div class="group-metrics"><div class="metric"><span>Carga</span><strong>${formatNumber(load)} / ${formatNumber(capacity)}</strong></div><div class="metric"><span>Itens</span><strong>${formatNumber(itemCount,0)}</strong></div><div class="metric"><span>Rações/dia</span><strong>${holder.consumesRations ? formatNumber(holder.dailyRations) : '—'}</strong></div><div class="metric"><span>Moedas</span><strong>${formatNumber(wallet.PO,0)} PO</strong></div></div><div class="coin-stack" style="justify-content:flex-start"><span class="coin-pill">${formatNumber(wallet.PO,0)} PO</span><span class="coin-pill">${formatNumber(wallet.PP,0)} PP</span><span class="coin-pill">${formatNumber(wallet.PC,0)} PC</span></div><div class="group-card-actions"><button class="button secondary small" data-holder-action="edit">Editar</button><button class="button ghost small" data-holder-action="remove">Remover</button></div></article>`;
+    const mine = holder.type === 'character' && holder.id === ownedCharacterId();
+    return `<article class="card group-card ${mine ? 'owned-character' : ''}" data-id="${esc(holder.id)}"><div class="group-card-header"><div><h3>${esc(holder.name)}</h3><div class="group-type">${esc(holderKind(holder))}${holder.player ? ` · ${esc(holder.player)}` : ''}${mine ? '<span class="owned-character-tag">Seu personagem</span>' : ''}</div></div><span class="group-status ${holder.active ? '' : 'inactive'}">${holder.active ? 'Ativo' : 'Fora da viagem'}</span></div><div class="group-metrics"><div class="metric"><span>Carga</span><strong>${formatNumber(load)} / ${formatNumber(capacity)}</strong></div><div class="metric"><span>Itens</span><strong>${formatNumber(itemCount,0)}</strong></div><div class="metric"><span>Rações/dia</span><strong>${holder.consumesRations ? formatNumber(holder.dailyRations) : '—'}</strong></div><div class="metric"><span>Moedas</span><strong>${formatNumber(wallet.PO,0)} PO</strong></div></div><div class="coin-stack" style="justify-content:flex-start"><span class="coin-pill">${formatNumber(wallet.PO,0)} PO</span><span class="coin-pill">${formatNumber(wallet.PP,0)} PP</span><span class="coin-pill">${formatNumber(wallet.PC,0)} PC</span></div><div class="group-card-actions"><button class="button secondary small" data-holder-action="edit">Editar</button><button class="button ghost small" data-holder-action="remove">Remover</button></div></article>`;
   };
   const groups = [
-    { title:'Animais de carga', holders:state.containers.filter((holder) => holder.type === 'animal') },
-    { title:'Personagens', holders:state.containers.filter((holder) => holder.type === 'character') },
-    { title:'Depósitos', holders:state.containers.filter((holder) => holder.type === 'stash') }
+    { title:'Animais de carga', holders:state.containers.filter((holder) => holder.type === 'animal').sort(compareHoldersForDisplay) },
+    { title:'Personagens', holders:state.containers.filter((holder) => holder.type === 'character').sort(compareHoldersForDisplay) },
+    { title:'Depósitos', holders:state.containers.filter((holder) => holder.type === 'stash').sort(compareHoldersForDisplay) }
   ];
   dom.groupList.innerHTML = groups.filter((group) => group.holders.length).map((group) => `<section class="group-section"><div class="group-section-heading"><h2>${group.title}</h2><span>${formatNumber(group.holders.length, 0)}</span></div><div class="group-section-grid">${group.holders.map(renderHolderCard).join('')}</div></section>`).join('');
   dom.groupList.querySelectorAll('[data-holder-action]').forEach((button) => button.addEventListener('click', (event) => {
@@ -1119,6 +1132,7 @@ function updateHolderFieldVisibility() {
   const character = dom.holderType.value === 'character';
   const stash = dom.holderType.value === 'stash';
   dom.holderPlayerLabel.classList.toggle('hidden', !character);
+  dom.holderMineLabel.classList.toggle('hidden', !character);
   dom.holderStrengthLabel.classList.toggle('hidden', !character);
   dom.holderConstitutionLabel.classList.toggle('hidden', !character);
   dom.holderCapacityLabel.classList.toggle('hidden', character);
@@ -1139,6 +1153,7 @@ function openHolderDialog(holder = null, type = 'character') {
   dom.holderType.value = model.type;
   dom.holderSubtype.value = model.subtype || '';
   dom.holderPlayer.value = model.player || '';
+  dom.holderMine.checked = Boolean(holder && holder.type === 'character' && holder.id === ownedCharacterId());
   dom.holderStrength.value = model.strength ?? 10;
   dom.holderConstitution.value = model.constitution ?? 10;
   dom.holderCapacity.value = model.capacity ?? (model.type === 'animal' ? 20 : 0);
@@ -1332,7 +1347,12 @@ function bindEvents() {
       if (!holder.name) throw new Error('Informe o nome do portador.');
       if (num(dom.holderDailyRations.value) < 0) throw new Error('O consumo diário deve ser maior ou igual a zero.');
       if (holder.type !== 'character' && num(dom.holderCapacity.value) < 0) throw new Error('A capacidade deve ser maior ou igual a zero.');
-      await saveHolder(holder); dom.holderDialog.close();
+      const wasOwned = holder.id === ownedCharacterId();
+      await saveHolder(holder);
+      if (holder.type === 'character' && dom.holderMine.checked) setOwnedCharacter(holder.id);
+      else if (wasOwned) setOwnedCharacter('');
+      renderAll();
+      dom.holderDialog.close();
     } catch (error) { toast(error.message, 'error'); }
   });
   dom.removeHolderForm.addEventListener('submit', async (event) => {

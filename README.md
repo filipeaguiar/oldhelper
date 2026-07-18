@@ -66,6 +66,8 @@ Não há cadastro de conta, e-mail ou senha. O apelido e o perfil da tela inicia
 - **Modo local:** o link só encontra a campanha na mesma origem e no mesmo navegador em que ela foi criada. Ele não transfere dados para outro dispositivo.
 - **Modo Firebase:** o mesmo código ou link abre os dados sincronizados em navegadores e dispositivos diferentes.
 
+Na edição de um personagem, a opção **Este personagem é meu neste dispositivo** o destaca e o mantém antes dos demais personagens nas listas. Essa preferência é local para que cada participante possa escolher seu próprio personagem sem alterar a escolha dos outros.
+
 O acesso funciona por posse do código: qualquer pessoa que conheça o código pode abrir e alterar a campanha. O código não deve ser tratado como uma senha forte.
 
 ## Configurar Firebase Authentication e Firestore
