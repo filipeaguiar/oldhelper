@@ -139,6 +139,7 @@ small, .field-help { color: var(--muted); font-weight: 500; line-height: 1.4; fo
 .counter { display: grid; grid-template-columns: 30px minmax(46px,auto) 30px; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: white; }
 .counter button { border: 0; background: var(--paper-2); height: 30px; font-weight: 900; color: var(--wine); }
 .counter span { text-align: center; padding: 0 7px; font-weight: 900; font-size: 13px; }
+.counter .counter-symbol { padding: 0; font-size: 20px; line-height: 1; }
 .mini-actions { display: flex; gap: 5px; }
 .mini-button { width: 31px; height: 31px; border-radius: 9px; border: 1px solid var(--line); background: white; color: var(--wine); font-weight: 900; }
 .empty-container { padding: 30px 18px; text-align: center; color: var(--muted); font-size: 13px; }
