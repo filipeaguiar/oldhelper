@@ -4,6 +4,7 @@ const $ = (id) => document.getElementById(id);
 const dom = {
   landing: $('landing'), app: $('app'), toast: $('toast'), connectionBadge: $('connectionBadge'),
   installBanner: $('installBanner'), installBtn: $('installBtn'), dismissInstallBtn: $('dismissInstallBtn'),
+  installDescription: $('installDescription'),
   displayName: $('displayName'), userRole: $('userRole'), createForm: $('createForm'), joinForm: $('joinForm'),
   campaignName: $('campaignName'), joinCode: $('joinCode'),
   campaignTitle: $('campaignTitle'), campaignCode: $('campaignCode'), syncStatus: $('syncStatus'),
@@ -52,9 +53,12 @@ function installWasDismissed() {
   try { return sessionStorage.getItem(INSTALL_DISMISSED_KEY) === 'true'; } catch { return false; }
 }
 function updateInstallBanner() {
-  const canInstall = Boolean(deferredInstallPrompt) && !isInstalledMode() && !installWasDismissed();
-  dom.installBanner.classList.toggle('hidden', !canInstall);
-  dom.installBtn.disabled = !canInstall;
+  const shouldShow = !isInstalledMode() && !installWasDismissed();
+  dom.installBanner.classList.toggle('hidden', !shouldShow);
+  dom.installBtn.disabled = !shouldShow;
+  dom.installDescription.textContent = deferredInstallPrompt
+    ? 'Acesse suas campanhas como um aplicativo e mantenha a interface disponível offline.'
+    : 'Instale pelo navegador para acessar suas campanhas como um aplicativo.';
 }
 function dismissInstallBanner() {
   try { sessionStorage.setItem(INSTALL_DISMISSED_KEY, 'true'); } catch {}
@@ -62,15 +66,23 @@ function dismissInstallBanner() {
   updateInstallBanner();
 }
 async function requestAppInstall() {
-  if (!deferredInstallPrompt) return;
+  if (!deferredInstallPrompt) {
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    toast(isIOS
+      ? 'No Safari, toque em Compartilhar e depois em Adicionar à Tela de Início.'
+      : 'Abra o menu do navegador e escolha Instalar aplicativo ou Adicionar à tela inicial.');
+    return;
+  }
   const promptEvent = deferredInstallPrompt;
   deferredInstallPrompt = null;
   updateInstallBanner();
   try {
     await promptEvent.prompt();
     await promptEvent.userChoice;
+    dismissInstallBanner();
   } catch (error) {
     console.warn('Não foi possível abrir o prompt de instalação.', error);
+    updateInstallBanner();
   }
 }
 
@@ -79,10 +91,7 @@ window.addEventListener('beforeinstallprompt', (event) => {
   deferredInstallPrompt = event;
   updateInstallBanner();
 });
-window.addEventListener('appinstalled', () => {
-  deferredInstallPrompt = null;
-  updateInstallBanner();
-});
+window.addEventListener('appinstalled', dismissInstallBanner);
 
 const categoryIcons = {
   'Arma': 'ra-sword', 'Armadura': 'ra-shield', 'Equipamento': 'ra-ammo-bag', 'Munição': 'ra-arrow-flights', 'Ração': 'ra-apple',
@@ -1328,6 +1337,7 @@ async function boot() {
   try { savedIdentity = JSON.parse(localStorage.getItem('oldHelperIdentity') || 'null'); } catch {}
   if (savedIdentity) { dom.displayName.value = savedIdentity.name || ''; dom.userRole.value = savedIdentity.role || 'player'; }
   bindEvents();
+  updateInstallBanner();
   await initCloud();
   state.identity = savedIdentity || { name:'Jogador', role:'player' };
   const requested = campaignCodeFromURL();
