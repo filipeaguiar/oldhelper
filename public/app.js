@@ -45,6 +45,7 @@ const state = {
 
 const INSTALL_DISMISSED_KEY = 'oldHelperInstallDismissed';
 const LAST_CAMPAIGN_KEY = 'oldHelperCampaignId';
+const pendingCoinConsolidations = new Set();
 let deferredInstallPrompt = null;
 
 function isInstalledMode() {
@@ -337,6 +338,7 @@ function readLocal(code) {
 }
 function writeLocal() {
   if (!state.campaignId) return;
+  consolidateAnimalCoinStacksInMemory();
   const payload = { campaign: state.campaign, containers: state.containers, items: state.items, history: state.history };
   localStorage.setItem(localKey(state.campaignId), JSON.stringify(payload));
   state.channel?.postMessage({ type:'update', code:state.campaignId });
@@ -349,7 +351,8 @@ function refreshLocal() {
   state.containers = (data.containers || []).map(normalizeHolder).sort((a,b) => a.order - b.order);
   state.items = repairItemTree((data.items || []).map(normalizeItem));
   state.history = data.history || [];
-  setSync('Salvo neste navegador', 'local');
+  if (consolidateAnimalCoinStacksInMemory()) writeLocal();
+  else setSync('Salvo neste navegador', 'local');
   renderAll();
 }
 
@@ -423,10 +426,12 @@ function attachCloudListeners() {
   state.unsubs.push(onSnapshot(query(collection(db, 'campaigns', code, 'containers'), orderBy('order')), (snap) => {
     state.containers = snap.docs.map((d, index) => normalizeHolder({ id:d.id, ...d.data() }, index));
     repairItemTree(); renderAll();
+    consolidateAnimalCoinStacks().catch(cloudError);
   }, cloudError));
   state.unsubs.push(onSnapshot(collection(db, 'campaigns', code, 'items'), (snap) => {
     state.items = repairItemTree(snap.docs.map((d) => normalizeItem({ id:d.id, ...d.data() })));
     renderAll();
+    consolidateAnimalCoinStacks().catch(cloudError);
   }, cloudError));
   state.unsubs.push(onSnapshot(query(collection(db, 'campaigns', code, 'history'), orderBy('at', 'desc'), limit(100)), (snap) => {
     state.history = snap.docs.map((d) => ({ id:d.id, ...d.data() }));
@@ -581,6 +586,71 @@ function originalOwnerAfterTransfer(item, targetContainerId) {
   if (targetHolder?.type !== 'animal') return '';
   if (originHolder?.type === 'animal') return item.originalOwnerId || '';
   return originHolder?.id || '';
+}
+function animalCoinStackKey(item) {
+  const holder = state.containers.find((candidate) => candidate.id === item.containerId);
+  if (item.category !== 'Moeda' || item.isContainer || holder?.type !== 'animal') return '';
+  return [item.containerId, item.parentItemId, item.originalOwnerId, item.unit].join('\u001f');
+}
+function coinStacksAtAnimal(item, target, originalOwnerId) {
+  const targetHolder = state.containers.find((holder) => holder.id === target.containerId);
+  if (item.category !== 'Moeda' || item.isContainer || targetHolder?.type !== 'animal') return [];
+  return state.items.filter((candidate) => candidate.id !== item.id
+    && candidate.category === 'Moeda'
+    && candidate.unit === item.unit
+    && candidate.containerId === target.containerId
+    && candidate.parentItemId === target.parentItemId
+    && candidate.originalOwnerId === originalOwnerId
+    && !candidate.isContainer).sort((a, b) => a.id.localeCompare(b.id));
+}
+function consolidateAnimalCoinStacksInMemory() {
+  const groups = new Map();
+  for (const item of state.items) {
+    const key = animalCoinStackKey(item);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const removedIds = new Set();
+  for (const items of groups.values()) {
+    if (items.length < 2) continue;
+    const ordered = [...items].sort((a, b) => a.id.localeCompare(b.id));
+    ordered[0].qty = ordered.reduce((sum, item) => sum + num(item.qty), 0);
+    for (const duplicate of ordered.slice(1)) removedIds.add(duplicate.id);
+  }
+  if (!removedIds.size) return false;
+  state.items = state.items.filter((item) => !removedIds.has(item.id));
+  return true;
+}
+async function consolidateAnimalCoinStacks() {
+  if (state.mode !== 'cloud' || !state.cloud) return;
+  const groups = new Map();
+  for (const item of state.items) {
+    const key = animalCoinStackKey(item);
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const { db, doc, runTransaction, serverTimestamp } = state.cloud;
+  for (const [key, items] of groups) {
+    if (items.length < 2 || pendingCoinConsolidations.has(key)) continue;
+    pendingCoinConsolidations.add(key);
+    try {
+      const ordered = [...items].sort((a, b) => a.id.localeCompare(b.id));
+      const refs = ordered.map((item) => doc(db, 'campaigns', state.campaignId, 'items', item.id));
+      await runTransaction(db, async (transaction) => {
+        const snaps = [];
+        for (const ref of refs) snaps.push(await transaction.get(ref));
+        const existing = snaps.filter((snap) => snap.exists());
+        if (existing.length < 2) return;
+        const total = existing.reduce((sum, snap) => sum + num(snap.data().qty), 0);
+        transaction.update(existing[0].ref, { qty:total, updatedAt:serverTimestamp(), updatedBy:state.identity?.name || 'Sistema' });
+        for (const duplicate of existing.slice(1)) transaction.delete(duplicate.ref);
+      });
+    } finally {
+      pendingCoinConsolidations.delete(key);
+    }
+  }
 }
 function containerLoad(containerId) {
   const items = state.items.filter((item) => item.containerId === containerId);
@@ -855,12 +925,21 @@ async function executeItemTransfer() {
   const originLabel = originItem?.name || originHolder?.name || 'outro destino';
   const targetDetails = transferDestinationDetails(target);
   const transferredOwnerId = originalOwnerAfterTransfer(item, target.containerId);
+  const coinStacks = coinStacksAtAnimal(item, target, transferredOwnerId);
+  const coinStack = coinStacks[0] || null;
+  const mergedCoinQuantity = coinStacks.reduce((sum, stack) => sum + num(stack.qty), quantity);
 
   if (state.mode === 'cloud') {
     const { db, doc, collection, writeBatch, serverTimestamp } = state.cloud;
     const batch = writeBatch(db);
     const itemRef = doc(db, 'campaigns', state.campaignId, 'items', item.id);
-    if (partial) {
+    if (coinStack) {
+      const stackRef = doc(db, 'campaigns', state.campaignId, 'items', coinStack.id);
+      batch.update(stackRef, { qty:mergedCoinQuantity, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+      for (const duplicate of coinStacks.slice(1)) batch.delete(doc(db, 'campaigns', state.campaignId, 'items', duplicate.id));
+      if (partial) batch.update(itemRef, { qty:available - quantity, updatedAt:serverTimestamp(), updatedBy:state.identity.name });
+      else batch.delete(itemRef);
+    } else if (partial) {
       const newRef = doc(collection(db, 'campaigns', state.campaignId, 'items'));
       const newItem = {
         ...item, qty:quantity, containerId:target.containerId, parentItemId:target.parentItemId,
@@ -874,6 +953,14 @@ async function executeItemTransfer() {
       for (const child of descendants) batch.update(doc(db, 'campaigns', state.campaignId, 'items', child.id), { containerId:target.containerId, originalOwnerId:originalOwnerAfterTransfer(child, target.containerId), updatedAt:serverTimestamp(), updatedBy:state.identity.name });
     }
     await batch.commit();
+  } else if (coinStack) {
+    const timestamp = nowISO();
+    Object.assign(coinStack, { qty:mergedCoinQuantity, updatedAt:timestamp, updatedBy:state.identity.name });
+    const removedIds = new Set(coinStacks.slice(1).map((stack) => stack.id));
+    if (!partial) removedIds.add(item.id);
+    state.items = state.items.filter((candidate) => !removedIds.has(candidate.id));
+    if (partial) Object.assign(item, { qty:available - quantity, updatedAt:timestamp, updatedBy:state.identity.name });
+    writeLocal(); renderAll();
   } else if (partial) {
     const timestamp = nowISO();
     Object.assign(item, { qty:available - quantity, updatedAt:timestamp, updatedBy:state.identity.name });
